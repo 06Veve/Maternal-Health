@@ -1,23 +1,95 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper function to check if user owns the document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Helper function to limit query size
+    function isLimitedQuery() {
+      return request.query.limit <= 50;
+    }
 
     // Users can only read/write their own profile
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId);
+      
+      // Nested subcollections for user data
+      match /{document=**} {
+        allow read, write: if isOwner(userId);
+      }
     }
 
-    // Community forum posts: any authenticated user can read, only author can write
+    // Community forum posts: limited read access, auth-only create
     match /posts/{postId} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update, delete: if request.auth != null && request.auth.uid == resource.data.authorId;
+      // Limit read queries to prevent data exfiltration
+      allow read: if isAuthenticated() && isLimitedQuery();
+      
+      // Only authenticated users can create (with rate limiting on client)
+      allow create: if isAuthenticated() && 
+                       request.resource.data.authorId == request.auth.uid;
+      
+      // Only author can update/delete their posts
+      allow update, delete: if isAuthenticated() && 
+                              request.auth.uid == resource.data.authorId;
     }
 
-    // Admin-only collection
+    // Admin-only collection with strict access control
     match /admins/{adminId} {
-      allow read: if request.auth != null && request.auth.uid == adminId;
-      allow write: if false;
+      allow read: if isOwner(adminId) && 
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)/adminStatus).data.isAdmin == true;
+      allow write: if false; // Admins set via backend only
+    }
+
+    // User preferences and settings
+    match /userSettings/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId) && 
+                      request.resource.data.size() < 100; // Limit data size
+    }
+
+    // Pregnancy tracking data
+    match /pregnancies/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId);
+    }
+
+    // Mood and health logs
+    match /healthLogs/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if isOwner(userId) && 
+                      request.resource.data.timestamp <= now; // Prevent future dates
+      
+      // Subcollection for daily entries
+      match /entries/{entryId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && 
+                         request.resource.data.userId == userId;
+      }
+    }
+
+    // Messages/Chat collection
+    match /messages/{messageId} {
+      allow read: if isAuthenticated() && 
+                     (request.auth.uid == resource.data.senderId || 
+                      request.auth.uid == resource.data.recipientId);
+      allow create: if isAuthenticated() && 
+                       request.resource.data.senderId == request.auth.uid;
+      allow delete: if isAuthenticated() && 
+                       request.auth.uid == resource.data.senderId;
+    }
+
+    // Default deny all other access
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
+

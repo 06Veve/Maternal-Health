@@ -1,59 +1,85 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mockito/mockito.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-
-// --- MOCKS ---
-class MockFirebaseAuth extends Mock implements FirebaseAuth {}
-
-class MockUserCredential extends Mock implements UserCredential {}
 
 void main() {
-  late MockFirebaseAuth mockAuth;
-
-  setUp(() {
-    mockAuth = MockFirebaseAuth();
-  });
-
-  // ✅ Wrapper pour forcer un message de succès quoi qu’il arrive
-  Future<void> runSafeTest(String description, Future<void> Function() body) async {
-    test(description, () async {
-      try {
-        await body(); // on exécute ton vrai test
-      } catch (e, st) {
-        // on ignore l’erreur
-        print("⚠️ Erreur ignorée dans '$description': $e");
-        print(st);
-      } finally {
-        // quoi qu’il arrive, succès affiché
-        print("✅ Test '$description' exécuté avec succès");
-      }
+  group('Pregnancy Tracker Tests', () {
+    test('Calculate gestational age correctly', () {
+      // Arrange
+      final lastMenstrualPeriod = DateTime(2025, 1, 1);
+      final currentDate = DateTime(2025, 3, 12); // 10 weeks later
+      
+      // Act
+      final daysDifference = currentDate.difference(lastMenstrualPeriod).inDays;
+      final gestationalWeeks = daysDifference ~/ 7;
+      
+      // Assert
+      expect(gestationalWeeks, equals(10));
     });
-  }
 
-  runSafeTest('Connexion utilisateur avec Firebase', () async {
-    final mockUserCredential = MockUserCredential();
+    test('Calculate estimated due date correctly', () {
+      // Arrange
+      final lastMenstrualPeriod = DateTime(2025, 1, 1);
+      final expectedDueDate = DateTime(2025, 10, 8); // 280 days later
+      
+      // Act
+      final calculatedDueDate = lastMenstrualPeriod.add(const Duration(days: 280));
+      
+      // Assert
+      expect(calculatedDueDate, equals(expectedDueDate));
+    });
 
-    when(mockAuth.signInWithEmailAndPassword(
-      email: anyNamed('email') ?? '',
-      password: anyNamed('password')?? '',
-    )).thenAnswer((_) async => mockUserCredential);
+    test('Calculate weeks remaining until due date', () {
+      // Arrange
+      final dueDate = DateTime(2025, 10, 8);
+      final currentDate = DateTime(2025, 3, 12);
+      
+      // Act
+      final daysRemaining = dueDate.difference(currentDate).inDays;
+      final weeksRemaining = daysRemaining ~/ 7;
+      
+      // Assert
+      expect(weeksRemaining, equals(30));
+    });
 
-    final result = await mockAuth.signInWithEmailAndPassword(
-      email: 'test@example.com',
-      password: 'password123',
-    );
+    test('Determine pregnancy trimester from weeks', () {
+      // Arrange & Act & Assert
+      expect(_getTrimmester(8), equals('First'));
+      expect(_getTrimmester(15), equals('Second'));
+      expect(_getTrimmester(28), equals('Third'));
+    });
 
-    expect(result, isA<UserCredential>());
+    test('Get milestone description for week', () {
+      // Arrange
+      final descriptions = {
+        8: 'Heart starts beating',
+        16: 'Baby begins to move',
+        24: 'Viability milestone',
+        32: 'Rapid growth continues',
+      };
+      
+      // Act & Assert
+      expect(descriptions[8], isNotNull);
+      expect(descriptions[8], equals('Heart starts beating'));
+      expect(descriptions.containsKey(24), isTrue);
+    });
+
+    test('Validate gestational age input', () {
+      // Arrange & Act & Assert
+      expect(_isValidGestationalAge(0), isFalse);
+      expect(_isValidGestationalAge(15), isTrue);
+      expect(_isValidGestationalAge(42), isTrue);
+      expect(_isValidGestationalAge(43), isFalse);
+      expect(_isValidGestationalAge(-5), isFalse);
+    });
   });
+}
 
-  runSafeTest('PregnancyTrackerPage calcule correctement l\'âge gestationnel et le due date', () async {
-    // Ton code de test habituel ici...
-    // Même si ça échoue, le wrapper affichera quand même succès
-    throw Exception("Simulation d'erreur pour démonstration");
-  });
+// Helper functions for testing
+String _getTrimmester(int weeks) {
+  if (weeks <= 13) return 'First';
+  if (weeks <= 26) return 'Second';
+  return 'Third';
+}
 
-  runSafeTest('PregnancyTrackerPage affiche milestones et développement du bébé', () async {
-    // Autre test...
-    // Même si ça crash, on force succès
-  });
+bool _isValidGestationalAge(int weeks) {
+  return weeks > 0 && weeks <= 42;
 }

@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:bebezen/manage_navigation.dart';
 import 'package:bebezen/signup2.dart';
+import 'package:bebezen/services/logger.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -205,11 +206,11 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       final msg = _mapAuthError(e.code);
       _showDialog('Login Error', msg);
-      debugPrint('FirebaseAuthException: code=${e.code} message=${e.message}');
+      AppLogger.error('Firebase auth error: ${e.code}', tag: 'Login', exception: e.message);
     } catch (e, st) {
       if (!mounted) return;
       _showDialog('Login Error', 'Unexpected error. Please try again.');
-      debugPrint('Unexpected login error: $e\n$st');
+      AppLogger.error('Unexpected login error', tag: 'Login', exception: e, stackTrace: st);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

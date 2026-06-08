@@ -2,7 +2,6 @@ import 'package:bebezen/home.dart';
 import 'package:bebezen/insights.dart';
 import 'package:bebezen/messages.dart';
 import 'package:bebezen/profile.dart';
-import 'package:bebezen/secret_chats.dart';
 import 'package:flutter/material.dart';
 class ManageNavigation extends StatefulWidget {
   const ManageNavigation({super.key});

@@ -5,6 +5,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'package:bebezen/manage_navigation.dart';
 import 'package:bebezen/login.dart';
+import 'package:bebezen/services/logger.dart';
+import 'package:bebezen/services/input_validator.dart';
 
 class Signup extends StatefulWidget {
   const Signup({super.key});
@@ -101,7 +103,8 @@ class _SignupState extends State<Signup> {
       );
 
       // 2) Optionnel: définir displayName
-      await cred.user?.updateDisplayName(_nameController.text.trim());
+      final sanitizedName = InputValidator.sanitizeInput(_nameController.text);
+      await cred.user?.updateDisplayName(sanitizedName);
 
       // 3) Préparation des métadonnées grossesse
       final now = DateTime.now();
@@ -112,7 +115,7 @@ class _SignupState extends State<Signup> {
       // 4) Écriture Firestore (timestamps côté client + serverTimestamp pour traçabilité)
       final uid = cred.user!.uid;
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
-        'name': _nameController.text.trim(),
+        'name': sanitizedName,
         'email': _emailController.text.trim(),
         'profileComplete': true,
         'createdAt': FieldValue.serverTimestamp(),
@@ -150,11 +153,24 @@ class _SignupState extends State<Signup> {
     } on FirebaseAuthException catch (e) {
       if (!mounted) return;
       final msg = _mapAuthError(e.code);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-    } catch (e) {
+      AppLogger.error('Signup error: ${e.code}', tag: 'Signup', exception: e.message);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(msg),
+        backgroundColor: Colors.red,
+      ));
+    } catch (e, st) {
       if (!mounted) return;
+      AppLogger.error(
+        'Unexpected signup error',
+        tag: 'Signup',
+        exception: e,
+        stackTrace: st,
+      );
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("An unexpected error occurred. Please try again.")),
+        const SnackBar(
+          content: Text("An unexpected error occurred. Please try again."),
+          backgroundColor: Colors.red,
+        ),
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);

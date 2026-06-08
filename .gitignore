@@ -48,6 +48,11 @@ app.*.map.json
 lib/firebase_options.dart
 android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
+
+# Environment variables (never commit)
+.env
+.env.local
+.env.*.local
 .firebaserc
 
 # Node / Firebase functions

@@ -44,7 +44,6 @@ class _MessagePageState extends State<MessagePage> {
   Uint8List? _selectedImage;
 
   // States
-  bool _isLoading = false;
   bool _isGeminiReady = false;
 
   // Firebase AI Logic - Generative Model
@@ -227,7 +226,6 @@ class _MessagePageState extends State<MessagePage> {
       );
       newMessage.animatedText = userMessage;
       _messages.add(newMessage);
-      _isLoading = true;
       _messageController.clear();
     });
 
@@ -254,11 +252,9 @@ class _MessagePageState extends State<MessagePage> {
           isUser: false,
           timestamp: DateTime.now(),
         ));
-        _isLoading = false;
       });
     } catch (e) {
       setState(() {
-        _isLoading = false;
         _messages.add(ChatMessage(
           text: 'Erreur: $e',
           isUser: false,

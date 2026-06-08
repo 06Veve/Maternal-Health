@@ -6,7 +6,7 @@ import 'package:bebezen/home_nav_pages/Emerg_services.dart';
 import 'package:bebezen/home_nav_pages/healthy_tips.dart';
 import 'package:bebezen/home_nav_pages/preg_tracker.dart';
 import 'package:bebezen/login.dart';
-import 'package:bebezen/signup2.dart';
+import 'package:bebezen/services/logger.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -21,14 +21,12 @@ class Home extends StatefulWidget {
 class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
   final User? user = FirebaseAuth.instance.currentUser;
   late AnimationController _controller;
-  late Animation<double> _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
     _controller =
         AnimationController(vsync: this, duration: const Duration(seconds: 2));
-    _fadeAnimation = CurvedAnimation(parent: _controller, curve: Curves.easeIn);
     _controller.forward();
   }
 
@@ -87,7 +85,7 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
 
             final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
             final gestationalAge = calculateGestationalAge(data);
-            print("AGE 😐😐😐😐😐😐😐😐😐😐 $gestationalAge");
+            AppLogger.debug('Calculated gestational age: $gestationalAge', tag: 'Home');
 
             return SingleChildScrollView(
               child: Padding(
