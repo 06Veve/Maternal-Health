@@ -82,30 +82,7 @@ class _ProfilePageState extends State<ProfilePage>
             .doc(user?.uid)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, color: Colors.pinkAccent, size: 48),
-                  const SizedBox(height: 12),
-                  const Text(
-                    "Unable to load profile",
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    snapshot.error.toString().contains('permission')
-                        ? "Permission denied. Contact support."
-                        : "Check your internet connection.",
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                ],
-              ),
-            );
-          }
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (!snapshot.hasData) {
             return const Center(
               child: CircularProgressIndicator(
                 valueColor: AlwaysStoppedAnimation(Colors.pinkAccent),

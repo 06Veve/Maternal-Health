@@ -1,3 +1,4 @@
+
 // -------------------------------
 // IMPORTS
 // -------------------------------
@@ -20,7 +21,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_ai/firebase_ai.dart';
 import 'firebase_options.dart';
 
-// (facultatif) tes autres pagesc
+// (facultatif) tes autres pages
 // import 'package:bebezen/profile.dart';
 
 // -------------------------------
@@ -78,10 +79,7 @@ class _MessagePageState extends State<MessagePage> {
 
       // Initialise le modèle (nvx SDK) – pas de clé API dans le code
       _model = FirebaseAI.googleAI().generativeModel(
-        model: 'gemini-2.5-flash',
-        systemInstruction: Content.system(
-          "Tu es Chat IA Assistant, un assistant intelligent conçu pour aider les femmes enceintes uniquement.",
-        ),
+        model: 'gemini-2.5-flash', // modèle recommandé
       );
 
       setState(() => _isGeminiReady = true);
@@ -200,7 +198,7 @@ class _MessagePageState extends State<MessagePage> {
 
     if (!_isGeminiReady) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Le modèle n’est pas prêt.")),
+        const SnackBar(content: Text('Le modèle n’est pas prêt.')),
       );
       return;
     }
@@ -238,15 +236,13 @@ class _MessagePageState extends State<MessagePage> {
     await _consumeCredit();
 
     try {
-      // Construction du message multimodal utilisateur
-      final List<Part> userParts = [];
-      if (_selectedImage != null) {
-        userParts.add(InlineDataPart('image/jpeg', _selectedImage!));
-      }
-      userParts.add(TextPart(userMessage));
-
+      // Historique minimal + nouveau contenu multimodal
       final contents = <Content>[
-        Content.multi(userParts),
+        // contexte système léger (optionnel)
+        Content.text(
+            "Tu es Chat IA Assistant, un assistant intelligent conçu pour aider les femmes enceintes uniquement."),
+
+        Content.text(userMessage),
       ];
 
       final response = await _model.generateContent(contents);
@@ -421,16 +417,16 @@ class ChatMessage {
   });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
-        text: json['text'],
-        isUser: json['isUser'],
-        timestamp: DateTime.parse(json['timestamp']),
-      );
+    text: json['text'],
+    isUser: json['isUser'],
+    timestamp: DateTime.parse(json['timestamp']),
+  );
 
   Map<String, dynamic> toJson() => {
-        'text': text,
-        'isUser': isUser,
-        'timestamp': timestamp.toIso8601String(),
-      };
+    'text': text,
+    'isUser': isUser,
+    'timestamp': timestamp.toIso8601String(),
+  };
 }
 
 // -------------------------------
@@ -470,7 +466,7 @@ class ChatBubble extends StatelessWidget {
                 height: 180,
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) =>
-                    const Icon(Icons.broken_image, size: 40),
+                const Icon(Icons.broken_image, size: 40),
               ),
             ),
             const SizedBox(height: 8),
