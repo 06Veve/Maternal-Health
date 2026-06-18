@@ -18,39 +18,6 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  Future<void> _editName(BuildContext context, String currentName) async {
-    final controller = TextEditingController(text: currentName);
-    final value = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit name'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Full name'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (value == null || value.length < 2) return;
-    final user = FirebaseAuth.instance.currentUser!;
-    await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-      'name': value,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-    await user.updateDisplayName(value);
-  }
-
   int _week(Map<String, dynamic> pregnancy) {
     final initial = pregnancy['gestationalAgeWeeks'] as int? ?? 0;
     final reference = pregnancy['referenceDate'] as Timestamp?;
@@ -146,13 +113,6 @@ class ProfilePage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  BZButton(
-                    label: 'Edit name',
-                    onPressed: () => _editName(context, name),
-                    isSecondary: true,
-                    icon: Icons.edit_outlined,
-                  ),
-                  const SizedBox(height: 12),
                   BZButton(
                     label: 'Log out',
                     onPressed: () => _signOut(context),
