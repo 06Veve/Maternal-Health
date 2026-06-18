@@ -62,6 +62,8 @@ class _SignupState extends State<Signup> {
         }
       }
 
+      await cred.user!.updateDisplayName(_nameCtl.text.trim());
+
       if (!mounted) return;
       Navigator.pushAndRemoveUntil(
         context,

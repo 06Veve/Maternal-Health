@@ -110,9 +110,29 @@ service cloud.firestore {
     }
 
     match /posts/{postId} {
-      allow read: if signedIn() && request.query.limit <= 50;
+      allow get: if signedIn();
+      allow list: if signedIn() && request.query.limit <= 50;
       allow create: if signedIn() && request.resource.data.authorId == request.auth.uid;
       allow update, delete: if signedIn() && resource.data.authorId == request.auth.uid;
+
+      match /likes/{uid} {
+        allow get: if signedIn();
+        allow list: if signedIn() && request.query.limit <= 500;
+        allow create: if own(uid) && request.resource.data.userId == request.auth.uid;
+        allow delete: if own(uid);
+        allow update: if false;
+      }
+
+      match /replies/{replyId} {
+        allow get: if signedIn();
+        allow list: if signedIn() && request.query.limit <= 500;
+        allow create: if signedIn() &&
+          request.resource.data.authorId == request.auth.uid &&
+          request.resource.data.text is string &&
+          request.resource.data.text.size() > 0 &&
+          request.resource.data.text.size() <= 2000;
+        allow update, delete: if signedIn() && resource.data.authorId == request.auth.uid;
+      }
     }
 
     match /admins/{uid} {

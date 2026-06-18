@@ -49,6 +49,11 @@ class _MessagePageState extends State<MessagePage> {
         'createdAt': FieldValue.serverTimestamp(),
       });
       if (mounted) setState(() => _remaining = (_remaining ?? 10) - 1);
+    } on GeminiServiceException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.userMessage)));
     } on StateError catch (error) {
       if (!mounted) return;
       final message = error.message.contains('limit')

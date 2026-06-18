@@ -49,7 +49,6 @@ dependencies:
   mockito: ^5.5.0
   firebase_auth_mocks: ^0.15.0
   firebase_ai: ^3.12.1
-  google_generative_ai: ^0.4.7
   pdf: ^3.12.0
   printing: ^5.14.3
   google_fonts: ^8.1.0

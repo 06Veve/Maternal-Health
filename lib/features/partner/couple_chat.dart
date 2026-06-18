@@ -19,6 +19,7 @@ class _CoupleChatPageState extends State<CoupleChatPage> {
   final _scrollController = ScrollController();
   String? _householdId;
   String? _lastMarkedMessageId;
+  final Map<String, String> _memberNames = {};
 
   @override
   void initState() {
@@ -40,8 +41,34 @@ class _CoupleChatPageState extends State<CoupleChatPage> {
         .collection('users')
         .doc(uid)
         .get();
+    final userData = user.data();
+    final ownName = userData?['name'] as String?;
+    if (ownName != null && ownName.trim().isNotEmpty) {
+      _memberNames[uid] = ownName.trim();
+    }
+    final householdId = userData?['householdId'] as String?;
+    if (householdId != null) {
+      final household = await FirebaseFirestore.instance
+          .collection('households')
+          .doc(householdId)
+          .get();
+      final memberIds = <String>{
+        if (household.data()?['motherId'] case final String id) id,
+        if (household.data()?['partnerId'] case final String id) id,
+      };
+      for (final memberId in memberIds.where((id) => id != uid)) {
+        final member = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(memberId)
+            .get();
+        final name = member.data()?['name'] as String?;
+        if (name != null && name.trim().isNotEmpty) {
+          _memberNames[memberId] = name.trim();
+        }
+      }
+    }
     if (mounted) {
-      setState(() => _householdId = user.data()?['householdId'] as String?);
+      setState(() => _householdId = householdId);
     }
     if (widget.active) {
       await _markAsRead();
@@ -76,7 +103,10 @@ class _CoupleChatPageState extends State<CoupleChatPage> {
           'text': text,
           'senderId': user.uid,
           'senderName':
-              user.displayName ?? user.email?.split('@').first ?? 'Family',
+              _memberNames[user.uid] ??
+              user.displayName ??
+              user.email?.split('@').first ??
+              'Family',
           'createdAt': FieldValue.serverTimestamp(),
           'type': 'text',
         });
@@ -175,15 +205,18 @@ class _CoupleChatPageState extends State<CoupleChatPage> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  if (!mine)
-                                    Text(
-                                      data['senderName'] ?? 'Partner',
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                        color: BebezenPalette.primary,
-                                      ),
+                                  Text(
+                                    _memberNames[data['senderId']] ??
+                                        data['senderName'] ??
+                                        'Partner',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: mine
+                                          ? Colors.white70
+                                          : BebezenPalette.primary,
                                     ),
+                                  ),
                                   Text(
                                     data['text'] ?? '',
                                     style: TextStyle(
