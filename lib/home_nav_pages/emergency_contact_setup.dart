@@ -1,7 +1,8 @@
-import 'package:bebezen/home_nav_pages/Emerg_services.dart';
-import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:bebezen/core/services/account_service.dart';
+import 'package:bebezen/core/theme/bebezen_theme.dart';
+import 'package:bebezen/shared/widgets/bz_components.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/material.dart';
 
 class EmergencyContactSetup extends StatefulWidget {
   const EmergencyContactSetup({super.key});
@@ -14,168 +15,126 @@ class _EmergencyContactSetupState extends State<EmergencyContactSetup> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
-  String? relation;
-  Map<String, String>? emergencyContact;
+  String? _relation;
+  bool _saving = false;
 
   Future<void> _saveContact() async {
-    final userId = FirebaseAuth.instance.currentUser!.uid;
-
-    await FirebaseFirestore.instance
-        .collection("users")
-        .doc(userId)
-        .collection("emergencyContacts")
-        .add({
-      "name": _nameController.text.trim(),
-      "phone": _phoneController.text.trim(),
-
-      "createdAt": DateTime.now(),
-    });
-
-    if (mounted) {
-      Navigator.pop(context, true); // Return true so EmergencyServices reloads
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      final householdId = await AccountService().currentHouseholdId();
+      if (householdId == null) {
+        throw StateError('No family profile found.');
+      }
+      await FirebaseFirestore.instance
+          .collection('households')
+          .doc(householdId)
+          .collection('emergencyContacts')
+          .add({
+            'name': _nameController.text.trim(),
+            'phone': _phoneController.text.trim(),
+            'relation': _relation,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to save contact: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
-
-  final _auth = FirebaseAuth.instance;
-  final _firestore = FirebaseFirestore.instance;
 
   @override
-  void initState() {
-    super.initState();
-    _loadEmergencyContact();
-  }
-
-  /// 🔹 Load saved contact from Firestore
-  Future<void> _loadEmergencyContact() async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-
-    final doc = await _firestore
-        .collection("users")
-        .doc(uid)
-        .collection("emergencyContacts")
-        .doc("primary") // only one contact for now
-        .get();
-
-    if (doc.exists) {
-      setState(() {
-        emergencyContact = Map<String, String>.from(doc.data()!);
-      });
-    }
-  }
-
-  /// 🔹 Save contact to Firestore
-  Future<void> _saveEmergencyContact() async {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) return;
-
-    final data = {
-      "name": _nameController.text,
-      "phone": _phoneController.text,
-      "relation": relation!,
-    };
-
-    await _firestore
-        .collection("users")
-        .doc(uid)
-        .collection("emergency_contact")
-        .doc("primary")
-        .set(data);
-
-
-    setState(() {
-      emergencyContact = Map<String, String>.from(data);
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Emergency contact saved successfully!"),
-        backgroundColor: Colors.green,
-      ),
-    );
+  void dispose() {
+    _nameController.dispose();
+    _phoneController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        appBar: AppBar(title: const Text("Add Emergency Contact")),
-        body: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Form(
-                key: _formKey,
-                child: Column(
-                  children: [
-                    TextFormField(
-                      controller: _nameController,
-                      decoration: const InputDecoration(labelText: "Name"),
-                      validator: (v) => v!.isEmpty ? "Enter a name" : null,
-                    ),
-                    TextFormField(
-                      controller: _phoneController,
-                      decoration: const InputDecoration(labelText: "Phone"),
-                      validator: (v) => v!.isEmpty ? "Enter a phone" : null,
-                    ),
-                    const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      value: relation,
-                      decoration: const InputDecoration(
-                        labelText: "Relation",
-                        border: OutlineInputBorder(),
-                      ),
-                      items: ["Partner", "Mother", "Doctor", "Friend", "Other"]
-                          .map((rel) =>
-                          DropdownMenuItem(
-                            value: rel,
-                            child: Text(rel),
-                          ))
+      appBar: AppBar(title: const Text('Emergency contact')),
+      body: ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          const Icon(
+            Icons.emergency_outlined,
+            color: BebezenPalette.error,
+            size: 54,
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'Add a trusted contact',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 24),
+          Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                TextFormField(
+                  controller: _nameController,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    labelText: 'Name',
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
+                  validator: (value) =>
+                      (value ?? '').trim().isEmpty ? 'Enter a name' : null,
+                ),
+                const SizedBox(height: 14),
+                TextFormField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone number',
+                    prefixIcon: Icon(Icons.phone_outlined),
+                  ),
+                  validator: (value) => (value ?? '').trim().length < 6
+                      ? 'Enter a valid phone number'
+                      : null,
+                ),
+                const SizedBox(height: 14),
+                DropdownButtonFormField<String>(
+                  initialValue: _relation,
+                  decoration: const InputDecoration(
+                    labelText: 'Relationship',
+                    prefixIcon: Icon(Icons.people_outline),
+                  ),
+                  items:
+                      const ['Partner', 'Mother', 'Doctor', 'Friend', 'Other']
+                          .map(
+                            (value) => DropdownMenuItem(
+                              value: value,
+                              child: Text(value),
+                            ),
+                          )
                           .toList(),
-                      onChanged: (val) => setState(() => relation = val),
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red.shade600,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: () {
-                          _saveContact();
-                          if (_nameController.text.isEmpty ||
-                              _phoneController.text.isEmpty ||
-                              relation == null) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text("Please fill all fields"),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                            return;
-                          }
-                          setState(() {
-                            emergencyContact = {
-                              "name": _nameController.text,
-                              "phone": _phoneController.text,
-                              "relation": relation!,
-                            };
-                          });
-                        },
-                        child: const Text(
-                          "Save Contact",
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    )
-
-                  ],
-                )
-            )
-        )
+                  onChanged: (value) => setState(() => _relation = value),
+                  validator: (value) =>
+                      value == null ? 'Select a relationship' : null,
+                ),
+                const SizedBox(height: 24),
+                BZButton(
+                  label: 'Save contact',
+                  onPressed: _saveContact,
+                  isLoading: _saving,
+                  icon: Icons.save_outlined,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
-
 }

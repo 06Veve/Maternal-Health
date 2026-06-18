@@ -1,452 +1,208 @@
-import 'package:bebezen/mood.dart';
-import 'package:bebezen/profile.dart';
+import 'package:bebezen/core/theme/bebezen_theme.dart';
+import 'package:bebezen/features/health/kick_counter.dart';
+import 'package:bebezen/features/health/reminders.dart';
+import 'package:bebezen/features/health/symptom_tracker.dart';
+import 'package:bebezen/features/health/wellness_tracker.dart';
+import 'package:bebezen/features/partner/partner_mode.dart';
+import 'package:bebezen/home_nav_pages/preg_tracker.dart';
+import 'package:bebezen/shared/widgets/bz_components.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
-class Insights extends StatefulWidget {
+class Insights extends StatelessWidget {
   const Insights({super.key});
 
-  @override
-  State<Insights> createState() => _InsightsState();
-}
-
-class _InsightsState extends State<Insights> with TickerProviderStateMixin {
-  static const Color pinkStart = Color(0xFFFFE6F0);
-  static const Color pinkMid = Color(0xFFF9D7EB);
-  static const Color purple = Color(0xFF6B2E8D);
-  static const Color cardBg = Color(0xFFFFFFFF);
-  static const Color primaryText = Color(0xFF1A1A2E);
-  static const Color secondaryText = Color(0xFF6B7280);
-  static const Color accentPink = Color(0xFFE91E63);
-  static const Color accentPurple = Color(0xFF9C27B0);
-
-  late AnimationController _animationController;
-  late List<AnimationController> _cardAnimations;
-
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
-      vsync: this,
-    );
-
-    _cardAnimations = List.generate(4, (index) =>
-        AnimationController(
-          duration: Duration(milliseconds: 600 + (index * 100)),
-          vsync: this,
-        )
-    );
-
-    _animationController.forward();
-    for (var controller in _cardAnimations) {
-      controller.forward();
-    }
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    for (var controller in _cardAnimations) {
-      controller.dispose();
-    }
-    super.dispose();
+  int _week(Map<String, dynamic> pregnancy) {
+    final initial = pregnancy['gestationalAgeWeeks'] as int? ?? 0;
+    final reference = pregnancy['referenceDate'] as Timestamp?;
+    if (reference == null) return initial;
+    return (initial + DateTime.now().difference(reference.toDate()).inDays ~/ 7)
+        .clamp(0, 42);
   }
 
   @override
   Widget build(BuildContext context) {
-    final mq = MediaQuery.of(context);
-    final width = mq.size.width;
-    final height = mq.size.height;
-    final scale = (width / 375).clamp(0.85, 1.25);
-
+    final uid = FirebaseAuth.instance.currentUser!.uid;
     return Scaffold(
-
-      appBar: _buildModernAppBar(),
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFFFFE6F0),
-              Color(0xFFF9D7EB),
-              Color(0xFFE1BEE7),
-            ],
-            stops: [0.0, 0.6, 1.0],
-          ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20.0),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: 520,
-                  maxHeight: height - 32,
-                ),
-                child: _buildCardPanel(context, scale),
-              ),
-            ),
-          ),
-        ),
-      ),
-      //floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      //floatingActionButton: _buildModernFAB(),
-    );
-  }
-
-  PreferredSizeWidget _buildModernAppBar() {
-    return AppBar(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      leading: Container(
-        margin: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.9),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+      appBar: AppBar(
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Insights'),
+            Text(
+              'Your pregnancy at a glance',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400),
             ),
           ],
         ),
-        child:
-      IconButton(onPressed: (){
-        Navigator.push(context, MaterialPageRoute(builder: (context) => ProfilePage()));
-      },
-          icon: Icon(Icons.person_pin_circle_rounded, size: 24, color: accentPink,))
       ),
-      title: Container(
-        height: 45,
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.9),
-          borderRadius: BorderRadius.circular(25),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: TextFormField(
-          decoration: InputDecoration(
-            hintText: "Search insights...",
-            hintStyle: TextStyle(color: secondaryText.withOpacity(0.7)),
-            prefixIcon: const Icon(Icons.search, size: 20, color: accentPink),
-            border: InputBorder.none,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          ),
-        ),
-      ),
-    );
-  }
-
-
-  Widget _buildCardPanel(BuildContext context, double scale) {
-    return LayoutBuilder(
-      builder: (ctx, constraints) {
-        return AnimatedBuilder(
-          animation: _animationController,
-          builder: (context, child) {
-            return Transform.translate(
-              offset: Offset(0, 50 * (1 - _animationController.value)),
-              child: Opacity(
-                opacity: _animationController.value,
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 80),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .snapshots(),
+        builder: (context, userSnapshot) {
+          final householdId =
+              userSnapshot.data?.data()?['householdId'] as String?;
+          if (householdId == null) return const BZLoading();
+          return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection('households')
+                .doc(householdId)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) return const BZLoading();
+              final household = snapshot.data!.data() ?? {};
+              final pregnancy = Map<String, dynamic>.from(
+                household['pregnancy'] as Map? ?? {},
+              );
+              final week = _week(pregnancy);
+              final dueDate = pregnancy['dueDate'] as Timestamp?;
+              return ListView(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 110),
+                children: [
+                  _ProgressHeader(week: week, dueDate: dueDate?.toDate()),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Track your health',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 12),
+                  GridView.count(
+                    crossAxisCount: 2,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: .95,
                     children: [
-                      _buildHeader(scale),
-                      const SizedBox(height: 16),
-                      _buildSubtitle(scale),
-                      const SizedBox(height: 28),
-                      Expanded(
-                        child: SingleChildScrollView(
-                          physics: const BouncingScrollPhysics(),
-                          child: Column(
-                            children: [
-                              _buildAnimatedCard(0, _buildInsightCard(
-                                icon: Icons.analytics_outlined,
-                                title: "Cycle Trends",
-                                subtitle: "Discover patterns & insights",
-                                gradient: [const Color(0xFF667eea), const Color(0xFFFFE6F0)],
-                                scale: scale,
-                                onTap: () => _navigateToPage("Cycle Trends"),
-                              )),
-                              const SizedBox(height: 16),
-                              _buildAnimatedCard(1, _buildInsightCard(
-                                icon: Icons.restaurant_menu_outlined,
-                                title: "Nutrition & Wellness",
-                                subtitle: "Track your healthy habits",
-                                gradient: [const Color(0xFF11998e), const Color(0xFF38ef7d)],
-                                scale: scale,
-                                onTap: () => _navigateToPage("Nutrition & Wellness"),
-                              )),
-                              const SizedBox(height: 16),
-                              _buildAnimatedCard(2, _buildInsightCard(
-                                icon: Icons.psychology_outlined,
-                                title: "Mood & Symptoms",
-                                subtitle: "Monitor emotional wellness",
-                                gradient: [const Color(0xFFfc466b), const Color(0xFF3f5efb)],
-                                scale: scale,
-                                onTap: (){Navigator.push(context, MaterialPageRoute(builder: (context) => Mood()));}
-                              )),
-                              const SizedBox(height: 16),
-                              _buildAnimatedCard(3, _buildInsightCard(
-                                icon: Icons.lightbulb_outline,
-                                title: "Personalized Tips",
-                                subtitle: "AI-powered recommendations",
-                                gradient: [const Color(0xFFf093fb), const Color(0xFFf5576c)],
-                                scale: scale,
-                                onTap: () => _navigateToPage("Personalized Tips"),
-                              )),
-                            ],
-                          ),
-                        ),
+                      _InsightTile(
+                        icon: Icons.timeline,
+                        title: 'Pregnancy',
+                        subtitle: 'Progress & milestones',
+                        color: const Color(0xFF7357D6),
+                        onTap: () => _open(context, PregnancyTrackerPage()),
+                      ),
+                      _InsightTile(
+                        icon: Icons.monitor_heart_outlined,
+                        title: 'Symptoms',
+                        subtitle: 'Daily check-ins & PDF',
+                        color: const Color(0xFFE05276),
+                        onTap: () => _open(context, const SymptomTracker()),
+                      ),
+                      _InsightTile(
+                        icon: Icons.favorite_outline,
+                        title: 'Baby kicks',
+                        subtitle: 'Movement sessions',
+                        color: const Color(0xFFE66B6B),
+                        onTap: () => _open(context, const KickCounter()),
+                      ),
+                      _InsightTile(
+                        icon: Icons.restaurant_menu,
+                        title: 'Wellness',
+                        subtitle: 'Water, meals & activity',
+                        color: const Color(0xFF399B76),
+                        onTap: () =>
+                            _open(context, const WellnessTrackerPage()),
                       ),
                     ],
                   ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildAnimatedCard(int index, Widget card) {
-    return AnimatedBuilder(
-      animation: _cardAnimations[index],
-      builder: (context, child) {
-        return Transform.translate(
-          offset: Offset(0, 30 * (1 - _cardAnimations[index].value)),
-          child: Opacity(
-            opacity: _cardAnimations[index].value,
-            child: card,
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildHeader(double scale) {
-    return Row(
-      children: [
-        Hero(
-          tag: "insights_icon",
-          child: Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [accentPink, accentPurple],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: accentPink.withOpacity(0.3),
-                  blurRadius: 15,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: const Center(
-              child: Icon(
-                Icons.insights,
-                size: 26,
-                color: Colors.white,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(width: 16),
-        const Text(
-          "Insights",
-          style: TextStyle(
-            fontSize: 32,
-            fontWeight: FontWeight.w800,
-            color: primaryText,
-            letterSpacing: -0.5,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSubtitle(double scale) {
-    return const Text(
-      "Your health, your journey ✨",
-      style: TextStyle(
-        fontWeight: FontWeight.w500,
-        fontSize: 16,
-        color: secondaryText,
-        letterSpacing: 0.2,
-      ),
-    );
-  }
-
-  Widget _buildInsightCard({
-    required IconData icon,
-    required String title,
-    String? subtitle,
-    required List<Color> gradient,
-    required double scale,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        splashColor: gradient[0].withOpacity(0.1),
-        highlightColor: gradient[1].withOpacity(0.05),
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
-              BoxShadow(
-                color: gradient[0].withOpacity(0.1),
-                blurRadius: 30,
-                offset: const Offset(0, 5),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: gradient,
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
+                  const SizedBox(height: 24),
+                  Text(
+                    'Plan & support',
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: gradient[0].withOpacity(0.3),
-                      blurRadius: 15,
-                      offset: const Offset(0, 5),
-                    ),
-                  ],
-                ),
-                child: Icon(
-                  icon,
-                  color: Colors.white,
-                  size: 28,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: primaryText,
-                        letterSpacing: -0.2,
-                      ),
-                    ),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: secondaryText,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: gradient[0].withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  Icons.arrow_forward_ios,
-                  color: gradient[0],
-                  size: 16,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _navigateToPage(String pageName) {
-    Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            DetailPage(title: pageName),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          const begin = Offset(1.0, 0.0);
-          const end = Offset.zero;
-          const curve = Curves.easeInOutCubic;
-          var tween = Tween(begin: begin, end: end).chain(
-            CurveTween(curve: curve),
-          );
-          return SlideTransition(
-            position: animation.drive(tween),
-            child: child,
+                  const SizedBox(height: 12),
+                  _WideAction(
+                    icon: Icons.notifications_active_outlined,
+                    title: 'Reminders',
+                    subtitle: 'Vitamins and appointments',
+                    onTap: () => _open(context, const RemindersPage()),
+                  ),
+                  _WideAction(
+                    icon: Icons.family_restroom,
+                    title: 'Partner access',
+                    subtitle: household['partnerId'] == null
+                        ? 'Invite the baby’s father'
+                        : 'Your partner is connected',
+                    onTap: () => _open(context, const PartnerMode()),
+                  ),
+                  _WideAction(
+                    icon: Icons.lightbulb_outline,
+                    title: 'Tips for week $week',
+                    subtitle: 'Practical recommendations for this stage',
+                    onTap: () => _open(context, PregnancyTipsPage(week: week)),
+                  ),
+                ],
+              );
+            },
           );
         },
-        transitionDuration: const Duration(milliseconds: 300),
       ),
     );
   }
 
-  void _showAddDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        title: const Text("Add New Insight"),
-        content: const Text("What would you like to track today?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: accentPink,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+  static void _open(BuildContext context, Widget page) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+  }
+}
+
+class _ProgressHeader extends StatelessWidget {
+  const _ProgressHeader({required this.week, required this.dueDate});
+  final int week;
+  final DateTime? dueDate;
+
+  @override
+  Widget build(BuildContext context) {
+    final progress = (week / 40).clamp(0.0, 1.0);
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        gradient: BebezenPalette.primaryGradient,
+        borderRadius: BorderRadius.circular(28),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Week $week',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               ),
+              const Icon(Icons.pregnant_woman, color: Colors.white, size: 38),
+            ],
+          ),
+          Text(
+            dueDate == null
+                ? 'Estimated due date unavailable'
+                : 'Estimated due ${DateFormat('d MMMM yyyy').format(dueDate!)}',
+            style: const TextStyle(color: Colors.white70),
+          ),
+          const SizedBox(height: 18),
+          LinearProgressIndicator(
+            value: progress,
+            minHeight: 8,
+            borderRadius: BorderRadius.circular(8),
+            backgroundColor: Colors.white24,
+            valueColor: const AlwaysStoppedAnimation(Colors.white),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${(40 - week).clamp(0, 40)} weeks remaining',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
             ),
-            child: const Text("Add", style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -454,73 +210,199 @@ class _InsightsState extends State<Insights> with TickerProviderStateMixin {
   }
 }
 
-// Detail page for navigation
-class DetailPage extends StatelessWidget {
+class _InsightTile extends StatelessWidget {
+  const _InsightTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+  final IconData icon;
   final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
 
-  const DetailPage({super.key, required this.title});
+  @override
+  Widget build(BuildContext context) {
+    return BZCard(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            backgroundColor: color.withValues(alpha: .12),
+            child: Icon(icon, color: color),
+          ),
+          const Spacer(),
+          Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            subtitle,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WideAction extends StatelessWidget {
+  const _WideAction({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: BZCard(
+        onTap: onTap,
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: BebezenPalette.primaryLight,
+              child: Icon(icon, color: BebezenPalette.primary),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  Text(subtitle, style: Theme.of(context).textTheme.bodyMedium),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class PregnancyTipsPage extends StatelessWidget {
+  const PregnancyTipsPage({super.key, required this.week});
+  final int week;
+
+  List<(IconData, String, String)> get _tips {
+    if (week <= 13) {
+      return [
+        (
+          Icons.local_drink,
+          'Hydration',
+          'Sip water regularly, especially if nausea makes larger drinks difficult.',
+        ),
+        (
+          Icons.medication_outlined,
+          'Prenatal vitamins',
+          'Take supplements only as recommended by your maternity professional.',
+        ),
+        (
+          Icons.bedtime_outlined,
+          'Rest',
+          'Fatigue is common in the first trimester. Build short rest periods into your day.',
+        ),
+      ];
+    }
+    if (week <= 27) {
+      return [
+        (
+          Icons.directions_walk,
+          'Gentle movement',
+          'If your clinician agrees, regular moderate movement can support wellbeing.',
+        ),
+        (
+          Icons.restaurant,
+          'Balanced meals',
+          'Include protein, vegetables and iron-rich foods across the day.',
+        ),
+        (
+          Icons.calendar_month,
+          'Appointments',
+          'Keep prenatal visits and note questions before each appointment.',
+        ),
+      ];
+    }
+    return [
+      (
+        Icons.local_hospital_outlined,
+        'Birth preparation',
+        'Review your birth plan and transport arrangements with your care team.',
+      ),
+      (
+        Icons.favorite_outline,
+        'Baby movements',
+        'Learn your baby’s usual movement pattern and contact care urgently if it changes.',
+      ),
+      (
+        Icons.work_outline,
+        'Hospital bag',
+        'Prepare essential documents and supplies before the final weeks.',
+      ),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
-      appBar: AppBar(
-        title: Text(title),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        foregroundColor: const Color(0xFF1A1A2E),
-      ),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Hero(
-              tag: "insights_icon",
-              child: Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFE91E63), Color(0xFF9C27B0)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFE91E63).withOpacity(0.3),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
+      appBar: AppBar(title: Text('Tips for week $week')),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          ..._tips.map(
+            (tip) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: BZCard(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: BebezenPalette.primaryLight,
+                      child: Icon(tip.$1, color: BebezenPalette.primary),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            tip.$2,
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(tip.$3),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-                child: const Icon(
-                  Icons.insights,
-                  size: 40,
-                  color: Colors.white,
-                ),
               ),
             ),
-            const SizedBox(height: 32),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1A1A2E),
-              ),
+          ),
+          const BZCard(
+            child: Text(
+              'This information is educational and does not replace advice from your doctor or midwife. Seek urgent care for severe or worrying symptoms.',
             ),
-            const SizedBox(height: 16),
-            const Text(
-              "This is your detailed page!\nImplement your specific functionality here.",
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                color: Color(0xFF6B7280),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

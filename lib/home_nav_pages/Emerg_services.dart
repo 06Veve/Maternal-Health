@@ -1,10 +1,9 @@
-
 import 'package:bebezen/home.dart';
 import 'package:bebezen/home_nav_pages/emergency_contact_setup.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:bebezen/core/services/account_service.dart';
 
 class EmergencyServices extends StatefulWidget {
   const EmergencyServices({super.key});
@@ -34,30 +33,35 @@ class _EmergencyServicesState extends State<EmergencyServices> {
 
   // Check if the user has at least one contact and load them
   Future<void> _checkAndLoadContacts() async {
-    final userId = FirebaseAuth.instance.currentUser!.uid;
+    final householdId = await AccountService().currentHouseholdId();
+    if (householdId == null) return;
 
     final snapshot = await FirebaseFirestore.instance
-        .collection("users")
-        .doc(userId)
+        .collection("households")
+        .doc(householdId)
         .collection("emergencyContacts")
         .get();
 
     if (snapshot.docs.isEmpty) {
       // Navigate to setup and wait for result
-      final added = await Navigator.push(context, MaterialPageRoute(builder: (context)=> EmergencyContactSetup()));
+      final added = await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => EmergencyContactSetup()),
+      );
 
       if (added == true) {
         // Reload contacts after returning
         final newSnapshot = await FirebaseFirestore.instance
-            .collection("users")
-            .doc(userId)
+            .collection("households")
+            .doc(householdId)
             .collection("emergencyContacts")
             .get();
 
         if (mounted) {
           setState(() {
-            emergencyContacts =
-                newSnapshot.docs.map((doc) => doc.data()).toList();
+            emergencyContacts = newSnapshot.docs
+                .map((doc) => doc.data())
+                .toList();
           });
         }
       }
@@ -69,7 +73,6 @@ class _EmergencyServicesState extends State<EmergencyServices> {
       }
     }
   }
-
 
   // Call a contact
   Future<void> _callNumber(String number) async {
@@ -86,8 +89,6 @@ class _EmergencyServicesState extends State<EmergencyServices> {
       await launchUrl(url);
     }
   }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -188,11 +189,7 @@ class _EmergencyServicesState extends State<EmergencyServices> {
       ),
       child: Column(
         children: [
-          const Icon(
-            Icons.emergency,
-            color: Colors.white,
-            size: 48,
-          ),
+          const Icon(Icons.emergency, color: Colors.white, size: 48),
           const SizedBox(height: 16),
           const Text(
             "Need Emergency Help?",
@@ -205,10 +202,7 @@ class _EmergencyServicesState extends State<EmergencyServices> {
           const SizedBox(height: 8),
           const Text(
             "Get immediate emergency assistance",
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.white70,
-            ),
+            style: TextStyle(fontSize: 16, color: Colors.white70),
           ),
           const SizedBox(height: 20),
           SizedBox(
@@ -223,13 +217,12 @@ class _EmergencyServicesState extends State<EmergencyServices> {
                 ),
                 elevation: 0,
               ),
-              onPressed: selectedReason != null ? _handleEmergencyRequest : null,
+              onPressed: selectedReason != null
+                  ? _handleEmergencyRequest
+                  : null,
               child: const Text(
                 "REQUEST EMERGENCY HELP",
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
             ),
           ),
@@ -266,20 +259,14 @@ class _EmergencyServicesState extends State<EmergencyServices> {
               const SizedBox(width: 8),
               const Text(
                 "Select Emergency Reason",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ],
           ),
           const SizedBox(height: 4),
           const Text(
             "Please select the reason for your emergency",
-            style: TextStyle(
-              fontSize: 14,
-              color: Color(0xFF64748B),
-            ),
+            style: TextStyle(fontSize: 14, color: Color(0xFF64748B)),
           ),
           const SizedBox(height: 20),
           ...emergencyReasons.map((reason) => _buildReasonCheckbox(reason)),
@@ -381,7 +368,9 @@ class _EmergencyServicesState extends State<EmergencyServices> {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: selectedReason != null ? Colors.white : Colors.grey.shade600,
+                    color: selectedReason != null
+                        ? Colors.white
+                        : Colors.grey.shade600,
                   ),
                 ),
               ],
@@ -403,10 +392,7 @@ class _EmergencyServicesState extends State<EmergencyServices> {
       children: [
         const Text(
           "Emergency Contacts",
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
         ...emergencyContacts.map((contact) {
@@ -488,6 +474,4 @@ class _EmergencyServicesState extends State<EmergencyServices> {
       ),
     );
   }
-
-
 }

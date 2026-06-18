@@ -51,7 +51,7 @@ class _PregnancyTrackerPageState extends State<PregnancyTrackerPage>
   /// ---- LOGIC ----
   int calculateGestationalAge(Map<String, dynamic> data) {
     final int initialAge = data['gestationalAgeWeeks'] ?? 0;
-    final Timestamp? refTs = data['gestationalReferenceDate'];
+    final Timestamp? refTs = data['referenceDate'];
     if (refTs == null) return initialAge;
 
     final DateTime refDate = refTs.toDate();
@@ -61,9 +61,8 @@ class _PregnancyTrackerPageState extends State<PregnancyTrackerPage>
   }
 
   DateTime? calculateDueDate(Map<String, dynamic> data) {
-    final Timestamp? lmpTs = data['pregnancy']?['lmpEstimated'];
-    if (lmpTs == null) return null;
-    return lmpTs.toDate().add(const Duration(days: 280));
+    final Timestamp? dueDate = data['dueDate'];
+    return dueDate?.toDate();
   }
 
   int calculateDaysRemaining(DateTime? dueDate) {
@@ -80,9 +79,18 @@ class _PregnancyTrackerPageState extends State<PregnancyTrackerPage>
 
   String getBabySize(int gestationalAge) {
     final sizes = {
-      4: "Poppy seed", 6: "Lentil", 8: "Raspberry", 10: "Strawberry",
-      12: "Lime", 16: "Avocado", 20: "Banana", 24: "Corn",
-      28: "Eggplant", 32: "Pineapple", 36: "Papaya", 40: "Watermelon"
+      4: "Poppy seed",
+      6: "Lentil",
+      8: "Raspberry",
+      10: "Strawberry",
+      12: "Lime",
+      16: "Avocado",
+      20: "Banana",
+      24: "Corn",
+      28: "Eggplant",
+      32: "Pineapple",
+      36: "Papaya",
+      40: "Watermelon",
     };
 
     for (var week in sizes.keys.toList().reversed) {
@@ -109,8 +117,16 @@ class _PregnancyTrackerPageState extends State<PregnancyTrackerPage>
     final allMilestones = [
       {'week': 4, 'title': 'Neural tube forms', 'icon': Icons.psychology},
       {'week': 8, 'title': 'Heart beats regularly', 'icon': Icons.favorite},
-      {'week': 12, 'title': 'First trimester complete!', 'icon': Icons.celebration},
-      {'week': 16, 'title': 'Gender can be determined', 'icon': Icons.child_care},
+      {
+        'week': 12,
+        'title': 'First trimester complete!',
+        'icon': Icons.celebration,
+      },
+      {
+        'week': 16,
+        'title': 'Gender can be determined',
+        'icon': Icons.child_care,
+      },
       {'week': 20, 'title': 'Halfway milestone!', 'icon': Icons.emoji_emotions},
       {'week': 24, 'title': 'Viable outside womb', 'icon': Icons.shield},
       {'week': 28, 'title': 'Third trimester begins', 'icon': Icons.timeline},
@@ -119,7 +135,9 @@ class _PregnancyTrackerPageState extends State<PregnancyTrackerPage>
       {'week': 37, 'title': 'Full-term reached!', 'icon': Icons.star},
     ];
 
-    return allMilestones.where((m) => gestationalAge >= (m['week'] as int)).toList();
+    return allMilestones
+        .where((m) => gestationalAge >= (m['week'] as int))
+        .toList();
   }
 
   /// ---- UI BUILDERS ----
@@ -434,62 +452,63 @@ class _PregnancyTrackerPageState extends State<PregnancyTrackerPage>
             ],
           ),
           const SizedBox(height: 20),
-          ...milestones.take(4).map((milestone) => Container(
-            margin: const EdgeInsets.only(bottom: 16),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.green.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Colors.green.shade200,
-                width: 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
+          ...milestones
+              .take(4)
+              .map(
+                (milestone) => Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.green.shade500,
-                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.green.shade200, width: 1),
                   ),
-                  child: Icon(
-                    milestone['icon'],
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                      Text(
-                        milestone['title'],
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.green.shade800,
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.green.shade500,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          milestone['icon'],
+                          color: Colors.white,
+                          size: 20,
                         ),
                       ),
-                      Text(
-                        'Week ${milestone['week']}',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.green.shade600,
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              milestone['title'],
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.green.shade800,
+                              ),
+                            ),
+                            Text(
+                              'Week ${milestone['week']}',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.green.shade600,
+                              ),
+                            ),
+                          ],
                         ),
+                      ),
+                      Icon(
+                        Icons.check_circle,
+                        color: Colors.green.shade500,
+                        size: 24,
                       ),
                     ],
                   ),
                 ),
-                Icon(
-                  Icons.check_circle,
-                  color: Colors.green.shade500,
-                  size: 24,
-                ),
-              ],
-            ),
-          )),
+              ),
         ],
       ),
     );
@@ -525,7 +544,12 @@ class _PregnancyTrackerPageState extends State<PregnancyTrackerPage>
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+  Widget _buildStatCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -561,10 +585,7 @@ class _PregnancyTrackerPageState extends State<PregnancyTrackerPage>
           ),
           Text(
             title,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Color(0xFF64748B),
-            ),
+            style: const TextStyle(fontSize: 14, color: Color(0xFF64748B)),
           ),
         ],
       ),
@@ -581,8 +602,8 @@ class _PregnancyTrackerPageState extends State<PregnancyTrackerPage>
             .collection('users')
             .doc(user?.uid)
             .snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
+        builder: (context, userSnapshot) {
+          if (!userSnapshot.hasData) {
             return const Center(
               child: CircularProgressIndicator(
                 valueColor: AlwaysStoppedAnimation(Colors.pinkAccent),
@@ -590,47 +611,66 @@ class _PregnancyTrackerPageState extends State<PregnancyTrackerPage>
             );
           }
 
-          final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
-          final gestationalAge = calculateGestationalAge(data);
-          final currentDevelopment = getCurrentDevelopment(gestationalAge);
-          final dueDate = calculateDueDate(data);
+          final userData =
+              userSnapshot.data!.data() as Map<String, dynamic>? ?? {};
+          final householdId = userData['householdId'] as String?;
+          if (householdId == null)
+            return const Center(child: CircularProgressIndicator());
+          return StreamBuilder<DocumentSnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('households')
+                .doc(householdId)
+                .snapshots(),
+            builder: (context, householdSnapshot) {
+              if (!householdSnapshot.hasData)
+                return const Center(child: CircularProgressIndicator());
+              final household =
+                  householdSnapshot.data!.data() as Map<String, dynamic>? ?? {};
+              final data = Map<String, dynamic>.from(
+                household['pregnancy'] as Map? ?? {},
+              );
+              final gestationalAge = calculateGestationalAge(data);
+              final currentDevelopment = getCurrentDevelopment(gestationalAge);
+              final dueDate = calculateDueDate(data);
 
-          return FadeTransition(
-            opacity: _fadeAnimation,
-            child: CustomScrollView(
-              slivers: [
-                SliverAppBar(
-                  expandedHeight: 100,
-                  backgroundColor: Colors.transparent,
-                  elevation: 0,
-                  floating: true,
-                  flexibleSpace: const FlexibleSpaceBar(
-                    title: Text(
-                      'Pregnancy Tracker',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF2D3748),
+              return FadeTransition(
+                opacity: _fadeAnimation,
+                child: CustomScrollView(
+                  slivers: [
+                    SliverAppBar(
+                      expandedHeight: 100,
+                      backgroundColor: Colors.transparent,
+                      elevation: 0,
+                      floating: true,
+                      flexibleSpace: const FlexibleSpaceBar(
+                        title: Text(
+                          'Pregnancy Tracker',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF2D3748),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    SliverToBoxAdapter(
+                      child: Column(
+                        children: [
+                          if (gestationalAge > 0) ...[
+                            _buildHeroSection(gestationalAge, dueDate),
+                            _buildQuickStats(gestationalAge, dueDate),
+                            const SizedBox(height: 10),
+                          ],
+                          _buildDevelopmentCard(currentDevelopment),
+                          _buildMilestonesSection(gestationalAge),
+                          const SizedBox(height: 20),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                SliverToBoxAdapter(
-                  child: Column(
-                    children: [
-                      if (gestationalAge > 0) ...[
-                        _buildHeroSection(gestationalAge, dueDate),
-                        _buildQuickStats(gestationalAge, dueDate),
-                        const SizedBox(height: 10),
-                      ],
-                      _buildDevelopmentCard(currentDevelopment),
-                      _buildMilestonesSection(gestationalAge),
-                      const SizedBox(height: 20),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              );
+            },
           );
         },
       ),

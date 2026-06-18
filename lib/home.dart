@@ -1,12 +1,11 @@
 import 'package:bebezen/calendar.dart';
-import 'package:bebezen/custom_widget/HomeCard.dart';
-import 'package:bebezen/custom_widget/sos_button.dart';
+import 'package:bebezen/core/theme/bebezen_theme.dart';
 import 'package:bebezen/home_nav_pages/Comm_forum.dart';
 import 'package:bebezen/home_nav_pages/Emerg_services.dart';
 import 'package:bebezen/home_nav_pages/healthy_tips.dart';
 import 'package:bebezen/home_nav_pages/preg_tracker.dart';
-import 'package:bebezen/login.dart';
-import 'package:bebezen/services/logger.dart';
+import 'package:bebezen/features/partner/couple_chat.dart';
+import 'package:bebezen/shared/widgets/bz_components.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -18,56 +17,21 @@ class Home extends StatefulWidget {
   State<Home> createState() => _HomeState();
 }
 
-class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
+class _HomeState extends State<Home> {
   final User? user = FirebaseAuth.instance.currentUser;
-  late AnimationController _controller;
 
-  @override
-  void initState() {
-    super.initState();
-    _controller =
-        AnimationController(vsync: this, duration: const Duration(seconds: 2));
-    _controller.forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  /// ---- LOGIC ----
   int calculateGestationalAge(Map<String, dynamic> data) {
     final int initialAge = data['gestationalAgeWeeks'] ?? 0;
-    final Timestamp? refTs = data['gestationalReferenceDate'];
+    final Timestamp? refTs = data['referenceDate'];
     if (refTs == null) return initialAge;
-
-    final DateTime refDate = refTs.toDate();
-    final int weeksPassed = DateTime.now().difference(refDate).inDays ~/ 7;
-
-    return (initialAge + weeksPassed).clamp(0, 42); // cap at 42 weeks
+    final int weeksPassed =
+        DateTime.now().difference(refTs.toDate()).inDays ~/ 7;
+    return (initialAge + weeksPassed).clamp(0, 42);
   }
 
-  DateTime? calculateDueDate(Map<String, dynamic> data) {
-    final Timestamp? lmpTs = data['pregnancy']?['lmpEstimated'];
-    if (lmpTs == null) return null;
-    return lmpTs.toDate().add(const Duration(days: 280)); // 40 weeks
-  }
-
-  /// ---- MAIN BUILD ----
   @override
   Widget build(BuildContext context) {
-    Future<void> signout(BuildContext context) async {
-      await FirebaseAuth.instance.signOut();
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => LoginPage()),
-            (route) => false,
-      );
-    }
-
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF3F7),
       body: SafeArea(
         child: StreamBuilder<DocumentSnapshot>(
           stream: FirebaseFirestore.instance
@@ -75,216 +39,150 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
               .doc(user?.uid)
               .snapshots(),
           builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return const Center(
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation(Colors.pinkAccent),
-                ),
-              );
-            }
-
-            final data = snapshot.data!.data() as Map<String, dynamic>? ?? {};
-            final gestationalAge = calculateGestationalAge(data);
-            AppLogger.debug('Calculated gestational age: $gestationalAge', tag: 'Home');
-
-            return SingleChildScrollView(
-              child: Padding(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header
-                    _buildHeader(context),
-                    const SizedBox(height: 24),
-
-                    // Baby Progress (Firestore driven!)
-                    if (gestationalAge > 0)
-                      _buildBabyProgressCard(gestationalAge),
-                    const SizedBox(height: 28),
-
-                    // Section Title
-                    const Text(
-                      "Quick Actions",
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF2D2D2D),
+            if (!snapshot.hasData) return const BZLoading();
+            final profile =
+                snapshot.data!.data() as Map<String, dynamic>? ?? {};
+            final householdId = profile['householdId'] as String?;
+            if (householdId == null) return const BZLoading();
+            return StreamBuilder<DocumentSnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('households')
+                  .doc(householdId)
+                  .snapshots(),
+              builder: (context, householdSnapshot) {
+                if (!householdSnapshot.hasData) return const BZLoading();
+                final household =
+                    householdSnapshot.data!.data() as Map<String, dynamic>? ??
+                    {};
+                final pregnancy = Map<String, dynamic>.from(
+                  household['pregnancy'] as Map? ?? {},
+                );
+                final gestationalAge = calculateGestationalAge(pregnancy);
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(
+                        context,
+                        profile['name'] as String?,
+                        householdId,
                       ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Grid
-                    _buildCardsGrid(),
-                    const SizedBox(height: 20),
-                  ],
-                ),
-              ),
+                      const SizedBox(height: 32),
+                      if (gestationalAge > 0)
+                        _buildBabyProgressCard(gestationalAge),
+                      const SizedBox(height: 32),
+                      Text(
+                        "Quick Actions",
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                      const SizedBox(height: 16),
+                      _buildCardsGrid(),
+                    ],
+                  ),
+                );
+              },
             );
           },
         ),
       ),
-      floatingActionButton: Container(
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(30)),
-        child: SOSButton(onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Emergency message has been sent'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }),
-      ),
     );
   }
 
-  /// ---- UI HELPERS ----
-  Widget _buildHeader(context) {
-    final user = FirebaseAuth.instance.currentUser;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildHeader(
+    BuildContext context,
+    String? profileName,
+    String householdId,
+  ) {
+    final name = profileName ?? user?.email?.split("@")[0] ?? 'User';
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "Hey , ${user?.email?.split("@")[0] ?? 'User'}! 👋",
-                  style: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF2D2D2D),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  "Welcome back!",
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-              ],
+            Text(
+              "Hello, $name! 👋",
+              style: Theme.of(context).textTheme.titleLarge,
             ),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.pink.withOpacity(0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: IconButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => PregnancyCalendarPage()),
-                  );
-                },
-                icon: const Icon(Icons.calendar_month,
-                    color: Colors.pinkAccent, size: 24),
-              ),
+            Text(
+              "Let's take care of you today",
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        Text(
-          "Let's take care of you and your baby",
-          style: TextStyle(
-            fontSize: 16,
-            color: Colors.grey[600],
-            fontWeight: FontWeight.w400,
-          ),
+        Row(
+          children: [
+            BZCard(
+              padding: const EdgeInsets.all(12),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CoupleChatPage()),
+              ),
+              child: FamilyChatBadge(householdId: householdId),
+            ),
+            const SizedBox(width: 8),
+            BZCard(
+              padding: const EdgeInsets.all(12),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => PregnancyCalendarPage(),
+                ),
+              ),
+              child: const Icon(
+                Icons.calendar_month,
+                color: BebezenPalette.primary,
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
 
-  Widget _buildBabyProgressCard(int gestationalAge) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFFFE0E6), Color(0xFFFFD9D6)],
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.pink.withOpacity(0.2),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
+  Widget _buildBabyProgressCard(int age) {
+    return BZCard(
+      color: BebezenPalette.primaryLight,
       child: Row(
         children: [
           Expanded(
-            flex: 2,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.9),
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    "Week $gestationalAge",
+                    "Week $age",
                     style: const TextStyle(
-                      color: Colors.pinkAccent,
-                      fontWeight: FontWeight.w600,
+                      color: BebezenPalette.primary,
+                      fontWeight: FontWeight.bold,
                       fontSize: 12,
                     ),
                   ),
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  "Your baby is\n $gestationalAge weeks today! 💕",
+                  "Your baby is\n$age weeks today! 💕",
                   style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 22,
-                    color: Color(0xFF2D2D2D),
-                    height: 1.3,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  "Baby is growing beautifully",
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w400,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    height: 1.2,
                   ),
                 ),
               ],
             ),
           ),
-          Expanded(
-            flex: 1,
-            child: Container(
-              height: 100,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                image: const DecorationImage(
-                  image: AssetImage(
-                      "assets/images/hand-drawn-fetus-illustration.png"),
-                  fit: BoxFit.contain,
-                ),
-              ),
-            ),
+          Image.asset(
+            "assets/images/hand-drawn-fetus-illustration.png",
+            height: 80,
           ),
         ],
       ),
@@ -292,79 +190,63 @@ class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
   }
 
   Widget _buildCardsGrid() {
-    final cards = [
+    final actions = [
       {
-        'icon': Icons.pregnant_woman_outlined,
+        'icon': Icons.pregnant_woman,
         'title': 'Pregnancy\nTracker',
-        'color': Colors.purple.shade100
+        'page': PregnancyTrackerPage(),
       },
       {
-        'icon': Icons.emergency_rounded,
-        'title': ' Emergency\nServices',
-        'color': Colors.red.shade100
+        'icon': Icons.emergency,
+        'title': 'Emergency\nServices',
+        'page': const EmergencyServices(),
       },
       {
-        'icon': Icons.forum_rounded,
+        'icon': Icons.forum,
         'title': 'Community\nForum',
-        'color': Colors.blue.shade100
+        'page': const ForumPage(),
       },
       {
-        'icon': Icons.favorite_rounded,
+        'icon': Icons.favorite,
         'title': 'Healthy\nTips',
-        'color': Colors.pink.shade100
+        'page': HealthyTipsPage(),
       },
     ];
-
-    void _navigateToPage(BuildContext context, int index, String title) {
-      switch (index) {
-        case 0:
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => PregnancyTrackerPage()),
-          );
-          break;
-        case 1:
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const EmergencyServices()),
-          );
-          break;
-        case 2:
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => ForumPage()),
-          );
-          break;
-        case 3:
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => HealthyTipsPage()),
-          );
-          break;
-        default:
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('$title coming soon!')),
-          );
-      }
-    }
 
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        childAspectRatio: 1.1,
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
+        childAspectRatio: 1.1,
       ),
-      itemCount: cards.length,
-      itemBuilder: (context, index) {
-        final card = cards[index];
-        return Homecard(
-          icon: card['icon'] as IconData,
-          title: card['title'] as String,
-          color: card['color'] as Color,
-          onTap: () => _navigateToPage(context, index, card['title'] as String),
+      itemCount: actions.length,
+      itemBuilder: (context, i) {
+        return BZCard(
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => actions[i]['page'] as Widget,
+            ),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                actions[i]['icon'] as IconData,
+                color: BebezenPalette.primary,
+                size: 32,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                actions[i]['title'] as String,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
         );
       },
     );

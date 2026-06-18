@@ -1,5 +1,7 @@
+import 'package:bebezen/core/theme/bebezen_theme.dart';
 import 'package:bebezen/login.dart';
 import 'package:bebezen/manage_navigation.dart';
+import 'package:bebezen/shared/widgets/bz_components.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -22,31 +24,20 @@ class _Acceuil3State extends State<Acceuil3> {
 
   Future<void> _checkAuthAndRoute() async {
     try {
-      // Respecte le "Remember me" que tu as mis dans l'écran de login (clé: remember_me)
       final prefs = await SharedPreferences.getInstance();
       final remember = prefs.getBool('remember_me') ?? true;
-
       final user = FirebaseAuth.instance.currentUser;
 
-      // Si un user existe mais que remember == false, on évite l'auto-connexion
       if (user != null && !remember) {
         await FirebaseAuth.instance.signOut();
       }
 
-      // Si connecté & remember == true => redirection directe vers l'app
       if (user != null && remember) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          Navigator.pushReplacement(
-            context,
-            PageRouteBuilder(
-              pageBuilder: (context, a1, a2) => const ManageNavigation(),
-              transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                return FadeTransition(opacity: animation, child: child);
-              },
-            ),
-          );
-        });
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const ManageNavigation()),
+        );
       }
     } finally {
       if (mounted) setState(() => _booting = false);
@@ -55,182 +46,87 @@ class _Acceuil3State extends State<Acceuil3> {
 
   @override
   Widget build(BuildContext context) {
-    // Petit splash pendant le check
-    if (_booting) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
+    if (_booting) return const Scaffold(body: BZLoading());
 
     final loggedIn = FirebaseAuth.instance.currentUser != null;
 
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Colors.pink[50]!,
-              Colors.pink[100]!,
-              Colors.pink[200]!,
-            ],
-          ),
-        ),
+        decoration: const BoxDecoration(gradient: BebezenPalette.softGradient),
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24.0),
             child: Column(
               children: [
                 const Spacer(flex: 2),
-
-                // Logo et titre avec animation
                 Hero(
                   tag: "logo",
                   child: Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(25),
+                      borderRadius: BorderRadius.circular(30),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.pink.withOpacity(0.3),
-                          blurRadius: 20,
+                          color: BebezenPalette.primary.withOpacity(0.1),
+                          blurRadius: 30,
                           offset: const Offset(0, 10),
                         ),
                       ],
                     ),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(15),
+                      borderRadius: BorderRadius.circular(20),
                       child: Image.asset(
                         "assets/images/img.png",
-                        height: 120,
-                        width: 120,
+                        height: 100,
+                        width: 100,
                         fit: BoxFit.cover,
                       ),
                     ),
                   ),
                 ),
-
-                const SizedBox(height: 30),
-
-                const Text(
-                  "Maternal Health",
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.pink,
-                    letterSpacing: 1.2,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-
-                const SizedBox(height: 16),
-
+                const SizedBox(height: 32),
                 Text(
-                  "Your maternal health companion\n for personalized and secure care",
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.pink[700],
-                    height: 1.5,
+                  "Bebezen",
+                  style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                    color: BebezenPalette.primary,
+                    letterSpacing: -1,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  "Your maternal health companion\nfor personalized and secure care",
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: BebezenPalette.textSecondary,
                   ),
                   textAlign: TextAlign.center,
                 ),
-
-                const SizedBox(height: 40),
-
+                const SizedBox(height: 48),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    _buildFeatureIcon(
-                      icon: Icons.favorite,
-                      label: "Follow-Up",
-                      color: Colors.pink[400]!,
-                    ),
-                    _buildFeatureIcon(
-                      icon: Icons.calendar_today,
-                      label: "Recalls",
-                      color: Colors.pink[500]!,
-                    ),
-                    _buildFeatureIcon(
-                      icon: Icons.medical_services,
-                      label: "Advices",
-                      color: Colors.pink[600]!,
-                    ),
+                    _buildFeatureIcon(Icons.favorite, "Follow-Up"),
+                    _buildFeatureIcon(Icons.calendar_today, "Recalls"),
+                    _buildFeatureIcon(Icons.medical_services, "Advices"),
                   ],
                 ),
-
                 const Spacer(flex: 3),
-
-                // Bouton: route conditionnelle
-                Container(
-                  width: double.infinity,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(28),
-                    gradient: LinearGradient(
-                      colors: [Colors.pink[400]!, Colors.pink[600]!],
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.pink.withOpacity(0.4),
-                        blurRadius: 15,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: ElevatedButton(
-                    onPressed: () {
-                      final dest = loggedIn ? const ManageNavigation() : const LoginPage();
-                      Navigator.push(
-                        context,
-                        PageRouteBuilder(
-                          pageBuilder: (context, animation, secondaryAnimation) => dest,
-                          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                            return SlideTransition(
-                              position: animation.drive(
-                                Tween(begin: const Offset(1.0, 0.0), end: Offset.zero),
-                              ),
-                              child: child,
-                            );
-                          },
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          loggedIn ? "Enter App" : "Get Started",
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                BZButton(
+                  label: loggedIn ? "Enter App" : "Get Started",
+                  onPressed: () {
+                    final dest = loggedIn ? const ManageNavigation() : const LoginPage();
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => dest));
+                  },
                 ),
-
-                const SizedBox(height: 20),
-
-                Text(
+                const SizedBox(height: 24),
+                const Text(
                   "Secured • Confidential • Professional",
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.pink[600],
-                    fontWeight: FontWeight.w500,
+                    color: BebezenPalette.textSecondary,
+                    letterSpacing: 1,
                   ),
                 ),
-
                 const Spacer(),
               ],
             ),
@@ -240,39 +136,20 @@ class _Acceuil3State extends State<Acceuil3> {
     );
   }
 
-  Widget _buildFeatureIcon({
-    required IconData icon,
-    required String label,
-    required Color color,
-  }) {
+  Widget _buildFeatureIcon(IconData icon, String label) {
     return Column(
       children: [
-        Container(
+        BZCard(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: color.withOpacity(0.2),
-                blurRadius: 10,
-                offset: const Offset(0, 5),
-              ),
-            ],
-          ),
-          child: Icon(
-            icon,
-            color: color,
-            size: 28,
-          ),
+          child: Icon(icon, color: BebezenPalette.primary, size: 28),
         ),
         const SizedBox(height: 8),
         Text(
           label,
-          style: TextStyle(
+          style: const TextStyle(
             fontSize: 12,
-            color: color,
             fontWeight: FontWeight.w600,
+            color: BebezenPalette.textPrimary,
           ),
         ),
       ],

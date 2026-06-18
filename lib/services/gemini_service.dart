@@ -1,91 +1,129 @@
-import 'package:google_generative_ai/google_generative_ai.dart';
-import 'package:bebezen/services/logger.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_ai/firebase_ai.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_generative_ai/google_generative_ai.dart' as direct_ai;
 
-/// Gemini AI Service for pregnancy-related advice and support
-/// Uses Google Generative AI to provide evidence-based information
 class GeminiService {
-  late GenerativeModel _model;
-  static const String _tag = 'GeminiService';
-  static const String _modelName = 'gemini-1.5-flash';
+  static final GeminiService _instance = GeminiService._internal();
+  factory GeminiService() => _instance;
+  GeminiService._internal();
 
-  /// Initialize Gemini service with API key
-  /// Make sure to set GEMINI_API_KEY in your environment or pass it here
-  void initialize(String apiKey) {
-    try {
-      _model = GenerativeModel(
-        model: _modelName,
-        apiKey: apiKey,
-      );
-      AppLogger.success('Gemini service initialized', tag: _tag);
-    } catch (e, st) {
-      AppLogger.error(
-        'Failed to initialize Gemini service',
-        tag: _tag,
-        exception: e,
-        stackTrace: st,
-      );
-      rethrow;
+  void initialize() {}
+
+  Future<String> getResponse({
+    required String prompt,
+    Map<String, dynamic>? context,
+    bool isChat = true,
+  }) async {
+    final week = await _pregnancyWeek();
+    const buildApiKey = String.fromEnvironment('GEMINI_API_KEY');
+    final apiKey = buildApiKey.isNotEmpty
+        ? buildApiKey
+        : dotenv.env['GEMINI_API_KEY'] ?? '';
+    final String text;
+    if (apiKey.isNotEmpty) {
+      text = await _directResponse(prompt, week, apiKey);
+    } else {
+      text = await _firebaseResponse(prompt, week);
     }
+    await _consumeDailyQuota();
+    return text;
   }
 
-  /// Get pregnancy-related advice from Gemini
-  /// Returns AI-generated response about pregnancy topics
-  Future<String> getPregnancyAdvice(String question) async {
-    try {
-      AppLogger.info('Getting pregnancy advice for: $question', tag: _tag);
-
-      final systemPrompt = '''You are a helpful pregnancy support assistant. 
-Provide evidence-based, compassionate information about pregnancy, 
-maternal health, and fetal development. 
-Always encourage consulting with healthcare providers for medical concerns.
-Keep responses clear, concise, and reassuring.''';
-
-      final response = await _model.generateContent([
-        Content.text(systemPrompt),
-        Content.text(question),
-      ]);
-
-      final result = response.text ?? 'No response received';
-      AppLogger.success('Advice generated successfully', tag: _tag);
-      return result;
-    } catch (e, st) {
-      AppLogger.error(
-        'Error getting pregnancy advice',
-        tag: _tag,
-        exception: e,
-        stackTrace: st,
-      );
-      rethrow;
+  Future<String> _firebaseResponse(String prompt, int week) async {
+    final model = FirebaseAI.googleAI().generativeModel(
+      model: 'gemini-2.5-flash-lite',
+      systemInstruction: Content.system(
+        'You are Bebezen, a maternal-health education assistant. '
+        'The user is at pregnancy week $week. Give concise, compassionate, '
+        'evidence-aligned information in the same language as the user. '
+        'Never diagnose or prescribe. Clearly identify urgent warning signs '
+        'and recommend a healthcare professional when appropriate.',
+      ),
+      generationConfig: GenerationConfig(
+        temperature: 0.35,
+        maxOutputTokens: 700,
+      ),
+    );
+    final response = await model.generateContent([Content.text(prompt)]);
+    final text = response.text?.trim();
+    if (text == null || text.isEmpty) {
+      throw StateError('No assistant response was generated.');
     }
+    return text;
   }
 
-  /// Get information about pregnancy milestone
-  /// Pass week number to get relevant milestone information
-  Future<String> getMilestoneInfo(int weekNumber) async {
-    try {
-      AppLogger.info(
-        'Getting milestone info for week $weekNumber',
-        tag: _tag,
-      );
-
-      final prompt =
-          'Provide a brief, evidence-based summary of fetal development at week $weekNumber of pregnancy. Include size, key developments, and what the mother might experience. Keep it to 2-3 paragraphs.';
-
-      final response = await _model.generateContent([Content.text(prompt)]);
-
-      final result = response.text ?? 'No information available';
-      return result;
-    } catch (e, st) {
-      AppLogger.error(
-        'Error getting milestone info',
-        tag: _tag,
-        exception: e,
-        stackTrace: st,
-      );
-      rethrow;
+  Future<String> _directResponse(String prompt, int week, String apiKey) async {
+    final model = direct_ai.GenerativeModel(
+      model: 'gemini-2.5-flash-lite',
+      apiKey: apiKey,
+      systemInstruction: direct_ai.Content.system(
+        'You are Bebezen, a maternal-health education assistant. '
+        'The user is at pregnancy week $week. Give concise, compassionate, '
+        'evidence-aligned information in the same language as the user. '
+        'Never diagnose or prescribe. Clearly identify urgent warning signs '
+        'and recommend a healthcare professional when appropriate.',
+      ),
+      generationConfig: direct_ai.GenerationConfig(
+        temperature: 0.35,
+        maxOutputTokens: 700,
+      ),
+    );
+    final response = await model.generateContent([
+      direct_ai.Content.text(prompt),
+    ]);
+    final text = response.text?.trim();
+    if (text == null || text.isEmpty) {
+      throw StateError('No assistant response was generated.');
     }
+    return text;
   }
 
-  /// Check if service is initialized
-  bool get isInitialized => _model != null;
+  Future<int> _pregnancyWeek() async {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final user = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
+    final householdId = user.data()?['householdId'] as String?;
+    if (householdId == null) return 0;
+    final household = await FirebaseFirestore.instance
+        .collection('households')
+        .doc(householdId)
+        .get();
+    final pregnancy = Map<String, dynamic>.from(
+      household.data()?['pregnancy'] as Map? ?? {},
+    );
+    final initial = pregnancy['gestationalAgeWeeks'] as int? ?? 0;
+    final reference = pregnancy['referenceDate'] as Timestamp?;
+    if (reference == null) return initial;
+    return (initial + DateTime.now().difference(reference.toDate()).inDays ~/ 7)
+        .clamp(0, 42);
+  }
+
+  Future<void> _consumeDailyQuota() async {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    final now = DateTime.now();
+    final day =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final ref = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('usage')
+        .doc(day);
+    await FirebaseFirestore.instance.runTransaction((transaction) async {
+      final snapshot = await transaction.get(ref);
+      final count = snapshot.data()?['assistantCount'] as int? ?? 0;
+      if (count >= 10) {
+        throw StateError('Daily assistant limit reached.');
+      }
+      transaction.set(ref, {
+        'assistantCount': count + 1,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    });
+  }
+
+  bool get isInitialized => true;
 }

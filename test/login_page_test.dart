@@ -1,112 +1,33 @@
+import 'package:bebezen/services/input_validator.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mockito/mockito.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-
-// --- MOCKS ---
-class MockFirebaseAuth extends Mock implements FirebaseAuth {}
-
-class MockUserCredential extends Mock implements UserCredential {}
-
-class MockUser extends Mock implements User {
-  @override
-  String get uid => 'test-uid-123';
-
-  @override
-  String get email => 'test@example.com';
-}
 
 void main() {
-  late MockFirebaseAuth mockAuth;
-  late MockUserCredential mockUserCredential;
-  late MockUser mockUser;
+  group('Login validation', () {
+    test('accepts a valid email', () {
+      expect(InputValidator.validateEmail('test@example.com'), isNull);
+    });
 
-  setUp(() {
-    mockAuth = MockFirebaseAuth();
-    mockUserCredential = MockUserCredential();
-    mockUser = MockUser();
-  });
+    test('rejects an invalid email', () {
+      expect(InputValidator.validateEmail('invalid-email'), isNotNull);
+    });
 
-  test('User login with valid credentials returns UserCredential', () async {
-    // Arrange: Setup mocks
-    when(mockUserCredential.user).thenReturn(mockUser);
-    when(mockAuth.signInWithEmailAndPassword(
-      email: 'test@example.com',
-      password: 'password123',
-    )).thenAnswer((_) async => mockUserCredential);
+    test('requires a password', () {
+      expect(InputValidator.validatePassword(''), isNotNull);
+    });
 
-    // Act: Perform login
-    final result = await mockAuth.signInWithEmailAndPassword(
-      email: 'test@example.com',
-      password: 'password123',
-    );
+    test('accepts a strong password', () {
+      expect(InputValidator.validatePassword('Password123'), isNull);
+    });
 
-    // Assert: Verify results
-    expect(result, isA<UserCredential>());
-    expect(result.user, isNotNull);
-    expect(result.user?.email, equals('test@example.com'));
-    expect(result.user?.uid, equals('test-uid-123'));
-
-    // Verify mock was called correctly
-    verify(mockAuth.signInWithEmailAndPassword(
-      email: 'test@example.com',
-      password: 'password123',
-    )).called(1);
-  });
-
-  test('User login fails with invalid email format', () async {
-    // Arrange: Setup mock to throw exception
-    when(mockAuth.signInWithEmailAndPassword(
-      email: 'invalid-email',
-      password: 'password123',
-    )).thenThrow(
-      FirebaseAuthException(code: 'invalid-email', message: 'Invalid email format'),
-    );
-
-    // Act & Assert: Expect exception to be thrown
-    expect(
-      () => mockAuth.signInWithEmailAndPassword(
-        email: 'invalid-email',
-        password: 'password123',
-      ),
-      throwsA(isA<FirebaseAuthException>()),
-    );
-  });
-
-  test('User login fails with wrong password', () async {
-    // Arrange: Setup mock to throw wrong password exception
-    when(mockAuth.signInWithEmailAndPassword(
-      email: 'test@example.com',
-      password: 'wrongpassword',
-    )).thenThrow(
-      FirebaseAuthException(code: 'wrong-password', message: 'Wrong password'),
-    );
-
-    // Act & Assert: Expect exception
-    expect(
-      () => mockAuth.signInWithEmailAndPassword(
-        email: 'test@example.com',
-        password: 'wrongpassword',
-      ),
-      throwsA(isA<FirebaseAuthException>()),
-    );
-  });
-
-  test('User login fails with non-existent email', () async {
-    // Arrange
-    when(mockAuth.signInWithEmailAndPassword(
-      email: 'nonexistent@example.com',
-      password: 'password123',
-    )).thenThrow(
-      FirebaseAuthException(code: 'user-not-found', message: 'User not found'),
-    );
-
-    // Act & Assert
-    expect(
-      () => mockAuth.signInWithEmailAndPassword(
-        email: 'nonexistent@example.com',
-        password: 'password123',
-      ),
-      throwsA(isA<FirebaseAuthException>()),
-    );
+    test('requires matching password confirmation', () {
+      expect(
+        InputValidator.validatePasswordMatch('Password124', 'Password123'),
+        isNotNull,
+      );
+      expect(
+        InputValidator.validatePasswordMatch('Password123', 'Password123'),
+        isNull,
+      );
+    });
   });
 }

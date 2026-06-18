@@ -100,6 +100,7 @@ class _PregnancyCalendarPageState extends State<PregnancyCalendarPage> {
 
   // Firestore subscription
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _eventsSub;
+  CollectionReference<Map<String, dynamic>>? _eventsCol;
 
   // Event types for categorization
   final List<String> _eventTypes = [
@@ -108,7 +109,7 @@ class _PregnancyCalendarPageState extends State<PregnancyCalendarPage> {
     'Exercise',
     'Nutrition',
     'Personal',
-    'Other'
+    'Other',
   ];
 
   // Colors for different event types
@@ -139,15 +140,17 @@ class _PregnancyCalendarPageState extends State<PregnancyCalendarPage> {
     // Init local notifications
     flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
     const AndroidInitializationSettings androidInit =
-    AndroidInitializationSettings('@mipmap/ic_launcher');
-    const InitializationSettings initSettings =
-    InitializationSettings(android: androidInit);
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+    const InitializationSettings initSettings = InitializationSettings(
+      android: androidInit,
+    );
     flutterLocalNotificationsPlugin.initialize(initSettings);
 
     // Android 13+ notif permission
     flutterLocalNotificationsPlugin
         .resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>()
+          AndroidFlutterLocalNotificationsPlugin
+        >()
         ?.requestNotificationsPermission();
 
     // Subscribe to Firestore events of current user
@@ -161,32 +164,43 @@ class _PregnancyCalendarPageState extends State<PregnancyCalendarPage> {
   }
 
   CollectionReference<Map<String, dynamic>>? _userEventsCol() {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return null;
-    // ⚠ Remplace "users" par "user" si ta collection s’appelle ainsi.
-    return FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('events');
+    return _eventsCol;
   }
 
-  void _subscribeToUserEvents() {
-    final col = _userEventsCol();
-    if (col == null) return;
+  Future<void> _subscribeToUserEvents() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    final profile = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .get();
+    final householdId = profile.data()?['householdId'] as String?;
+    if (householdId == null) return;
+    final col = FirebaseFirestore.instance
+        .collection('households')
+        .doc(householdId)
+        .collection('events');
+    _eventsCol = col;
 
-    _eventsSub = col.orderBy('dateTime').snapshots().listen((snap) {
-      final map = <DateTime, List<PregnancyEvent>>{};
-      for (final doc in snap.docs) {
-        final data = doc.data();
-        if (data['dateTime'] == null) continue;
-        final event = PregnancyEvent.fromDoc(doc);
-        final key = dayKey(event.dateTime);
-        (map[key] ??= []).add(event);
-      }
-      setState(() => _events = map);
-    }, onError: (e) {
-      debugPrint('Error listening to events: $e');
-    });
+    _eventsSub = col
+        .orderBy('dateTime')
+        .snapshots()
+        .listen(
+          (snap) {
+            final map = <DateTime, List<PregnancyEvent>>{};
+            for (final doc in snap.docs) {
+              final data = doc.data();
+              if (data['dateTime'] == null) continue;
+              final event = PregnancyEvent.fromDoc(doc);
+              final key = dayKey(event.dateTime);
+              (map[key] ??= []).add(event);
+            }
+            setState(() => _events = map);
+          },
+          onError: (e) {
+            debugPrint('Error listening to events: $e');
+          },
+        );
   }
 
   /// Returns events for a specific day
@@ -394,7 +408,8 @@ class _PregnancyCalendarPageState extends State<PregnancyCalendarPage> {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
-                                'Event "$eventTitle" added successfully!'),
+                              'Event "$eventTitle" added successfully!',
+                            ),
                             backgroundColor: Colors.green,
                           ),
                         );
@@ -485,10 +500,7 @@ class _PregnancyCalendarPageState extends State<PregnancyCalendarPage> {
       headerStyle: const HeaderStyle(
         formatButtonVisible: false,
         titleCentered: true,
-        titleTextStyle: TextStyle(
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-        ),
+        titleTextStyle: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
       ),
       calendarStyle: const CalendarStyle(
         todayDecoration: BoxDecoration(
@@ -507,9 +519,7 @@ class _PregnancyCalendarPageState extends State<PregnancyCalendarPage> {
           color: Colors.white,
           fontWeight: FontWeight.bold,
         ),
-        weekendTextStyle: TextStyle(
-          color: Colors.grey,
-        ),
+        weekendTextStyle: TextStyle(color: Colors.grey),
         markerDecoration: BoxDecoration(
           color: Colors.purple,
           shape: BoxShape.circle,
@@ -600,10 +610,7 @@ class _PregnancyCalendarPageState extends State<PregnancyCalendarPage> {
                       contentPadding: const EdgeInsets.all(12),
                       leading: CircleAvatar(
                         backgroundColor: typeColor.withOpacity(0.1),
-                        child: Icon(
-                          typeIcon,
-                          color: typeColor,
-                        ),
+                        child: Icon(typeIcon, color: typeColor),
                       ),
                       title: Text(
                         event.title,
@@ -704,7 +711,6 @@ class _PregnancyCalendarPageState extends State<PregnancyCalendarPage> {
     );
   }
 
-
   /// Build statistics widget (UI unchanged)
   Widget _buildQuickStats() {
     final today = DateTime.now();
@@ -738,18 +744,11 @@ class _PregnancyCalendarPageState extends State<PregnancyCalendarPage> {
               ),
               const Text(
                 'Today\'s Tasks',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.pink,
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.pink),
               ),
             ],
           ),
-          Container(
-            width: 1,
-            height: 40,
-            color: Colors.pink[200],
-          ),
+          Container(width: 1, height: 40, color: Colors.pink[200]),
           Column(
             children: [
               Text(
@@ -762,10 +761,7 @@ class _PregnancyCalendarPageState extends State<PregnancyCalendarPage> {
               ),
               const Text(
                 'Total Days',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.pink,
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.pink),
               ),
             ],
           ),
@@ -823,10 +819,7 @@ class _PregnancyCalendarPageState extends State<PregnancyCalendarPage> {
         onPressed: _addEventDialog,
         backgroundColor: Colors.pink,
         icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text(
-          'Add Event',
-          style: TextStyle(color: Colors.white),
-        ),
+        label: const Text('Add Event', style: TextStyle(color: Colors.white)),
       ),
     );
   }
