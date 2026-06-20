@@ -1,531 +1,260 @@
-import 'package:flutter/material.dart';
 import 'package:bebezen/admin/admin_dashboard.dart';
-
-// 🔐 Firebase
+import 'package:bebezen/admin/admin_service.dart';
+import 'package:bebezen/core/theme/bebezen_theme.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-
-// 💾 Optionnel : "Remember me"
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class AdminLoginPage extends StatefulWidget {
+class AdminAccessGate extends StatelessWidget {
+  const AdminAccessGate({super.key});
+
   @override
-  _AdminLoginPageState createState() => _AdminLoginPageState();
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, auth) {
+        if (auth.connectionState == ConnectionState.waiting) {
+          return const _AdminLoading();
+        }
+        final user = auth.data;
+        if (user == null) return const AdminLoginPage();
+        return FutureBuilder<bool>(
+          future: AdminService().isCurrentUserAdmin(),
+          builder: (context, access) {
+            if (access.connectionState != ConnectionState.done) {
+              return const _AdminLoading();
+            }
+            if (access.hasError || access.data != true) {
+              return _UnauthorizedAccount(
+                email: user.email ?? 'Unknown',
+                uid: user.uid,
+                error: access.error,
+              );
+            }
+            return const AdminDashboard();
+          },
+        );
+      },
+    );
+  }
 }
 
-class _AdminLoginPageState extends State<AdminLoginPage>
-    with TickerProviderStateMixin {
-  // ========= CONFIG FIREBASE / ROLES (adaptez si besoin) =========
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+class AdminLoginPage extends StatefulWidget {
+  const AdminLoginPage({super.key});
 
-  // Collection des profils
-  static const String _userCollection = 'users';
+  @override
+  State<AdminLoginPage> createState() => _AdminLoginPageState();
+}
 
-  // Rôles autorisés pour entrer dans le dashboard
-  static const Set<String> _allowedRoles = {'admin', };
-
-  // Si vous utilisez une "clé rôle" côté Firestore (champ role_key),
-  // changez la valeur ci-dessous. Si le champ n’existe pas sur l’utilisateur,
-  // on ne bloque PAS (fallback permissif).
-
-
-  // ================================================================
-
+class _AdminLoginPageState extends State<AdminLoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
-  bool _isLoading = false;
-  bool _rememberMe = false;
+  bool _rememberEmail = false;
+  bool _loading = false;
 
-
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
-
-  // Demo credentials (uniquement pour le bouton "Show Demo Credentials")
-  final String _adminEmail = 'eyanamaeva@gmail.com';
-  final String _adminPassword = 'admin123';
   @override
   void initState() {
     super.initState();
+    _restoreEmail();
+  }
 
-    _animationController = AnimationController(
-      duration: Duration(milliseconds: 1500),
-      vsync: this,
-    );
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _animationController,
-        curve: Interval(0.0, 0.8, curve: Curves.easeOut),
-      ),
-    );
-    _slideAnimation = Tween<Offset>(
-      begin: Offset(0, 0.3),
-      end: Offset(0, 0),
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Interval(0.2, 1.0, curve: Curves.easeOut),
-    ));
-    _animationController.forward();
+  Future<void> _restoreEmail() async {
+    final preferences = await SharedPreferences.getInstance();
+    final email = preferences.getString('admin_saved_email');
+    if (!mounted || email == null) return;
+    setState(() {
+      _emailController.text = email;
+      _rememberEmail = true;
+    });
+  }
 
-    _loadRememberedEmail(); // ne change pas le design, juste la logique
+  Future<void> _login() async {
+    if (!_formKey.currentState!.validate() || _loading) return;
+    setState(() => _loading = true);
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+      final preferences = await SharedPreferences.getInstance();
+      if (_rememberEmail) {
+        await preferences.setString(
+          'admin_saved_email',
+          _emailController.text.trim(),
+        );
+      } else {
+        await preferences.remove('admin_saved_email');
+      }
+    } on FirebaseAuthException catch (error) {
+      _showError(_authMessage(error));
+    } catch (_) {
+      _showError('Connexion impossible. Vérifiez le réseau et réessayez.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String _authMessage(FirebaseAuthException error) {
+    return switch (error.code) {
+      'invalid-credential' ||
+      'wrong-password' ||
+      'user-not-found' => 'Email ou mot de passe incorrect.',
+      'invalid-email' => 'Adresse email invalide.',
+      'user-disabled' => 'Ce compte Firebase est désactivé.',
+      'too-many-requests' => 'Trop de tentatives. Réessayez plus tard.',
+      _ => error.message ?? 'Échec de la connexion.',
+    };
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red.shade700),
+    );
+  }
+
+  Future<void> _resetPassword() async {
+    final email = _emailController.text.trim();
+    if (!email.contains('@')) {
+      _showError('Saisissez d’abord une adresse email valide.');
+      return;
+    }
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Email de réinitialisation envoyé.')),
+      );
+    } on FirebaseAuthException catch (error) {
+      _showError(_authMessage(error));
+    }
   }
 
   @override
   void dispose() {
-    _animationController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadRememberedEmail() async {
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString('admin_saved_email');
-    if (saved != null && saved.isNotEmpty) {
-      setState(() {
-        _emailController.text = saved;
-        _rememberMe = true;
-      });
-    }
-  }
-
-  Future<void> _saveRememberedEmail() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (_rememberMe) {
-      await prefs.setString('admin_saved_email', _emailController.text.trim());
-    } else {
-      await prefs.remove('admin_saved_email');
-    }
-  }
-
-  Future<void> _login() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      // 1) Auth Firebase
-      final cred = await _auth.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-
-      final uid = cred.user?.uid;
-      if (uid == null) {
-        throw FirebaseAuthException(
-          code: 'unknown',
-          message: 'Utilisateur introuvable.',
-        );
-      }
-
-      // 2) Récup profil Firestore
-      final doc = await _db.collection(_userCollection).doc(uid).get();
-
-      if (!doc.exists) {
-        _showErrorSnackBar(
-          "Compte non autorisé (profil absent). Contactez l’administrateur.",
-        );
-        setState(() => _isLoading = false);
-        return;
-      }
-
-      final data = doc.data()!;
-      final role = (data['role'] as String?)?.toLowerCase();
-      final roleKey = data['role_key'] as String?;
-      final isActive = (data['is_active'] as bool?) ?? true;
-
-      final hasAllowedRole = role != null && _allowedRoles.contains(role);
-
-
-      if (!isActive) {
-        _showErrorSnackBar("Votre compte est désactivé. Contactez l’admin.");
-        setState(() => _isLoading = false);
-        return;
-      }
-
-      if (!hasAllowedRole ) {
-        _showErrorSnackBar("Accès refusé : rôle ou clé invalide.");
-        setState(() => _isLoading = false);
-        return;
-      }
-
-      // 3) Remember me (optionnel)
-      await _saveRememberedEmail();
-
-      // 4) Navigation
-      if (!mounted) return;
-      // 4) Navigation to AdminDashboard
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => AdminDashboard()),
-      );
-
-    } on FirebaseAuthException catch (e) {
-      setState(() => _isLoading = false);
-
-      switch (e.code) {
-        case 'user-not-found':
-          _showErrorSnackBar("Aucun compte trouvé avec cet e-mail.");
-          break;
-        case 'wrong-password':
-          _showErrorSnackBar("Mot de passe incorrect.");
-          break;
-        case 'invalid-email':
-          _showErrorSnackBar("E-mail invalide.");
-          break;
-        case 'user-disabled':
-          _showErrorSnackBar("Ce compte est désactivé.");
-          break;
-        case 'too-many-requests':
-          _showErrorSnackBar(
-              "Trop de tentatives. Réessayez plus tard ou réinitialisez le mot de passe.");
-          break;
-        default:
-          _showErrorSnackBar(e.message ?? "Échec de connexion.");
-      }
-    } catch (e) {
-      setState(() => _isLoading = false);
-      _showErrorSnackBar("Erreur inattendue : ${e.toString()}");
-    }
-  }
-
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.error_outline, color: Colors.white),
-            SizedBox(width: 12),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: Colors.red[400],
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-      ),
-    );
-  }
-
-  void _showInfoSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(Icons.info_outline, color: Colors.white),
-            SizedBox(width: 12),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: Colors.blue[400],
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-      ),
-    );
-  }
-
-  void _showDemoCredentials() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.info_outline, color: Colors.blue),
-            SizedBox(width: 12),
-            Text('Demo Credentials'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Use these credentials to access the admin dashboard:'),
-            SizedBox(height: 16),
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Email: $_adminEmail', style: TextStyle(fontFamily: 'monospace')),
-                  Text('Password: $_adminPassword', style: TextStyle(fontFamily: 'monospace')),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Got it'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _emailController.text = _adminEmail;
-              _passwordController.text = _adminPassword;
-            },
-            child: Text('Fill Form'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    // ⚠ DESIGN INCHANGÉ — uniquement correction null-safety (Colors.white)
     return Scaffold(
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.pink.shade100,
-              Colors.pinkAccent,
-              Colors.white,
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.all(24),
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: SlideTransition(
-                  position: _slideAnimation,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: 400),
-                    child: Card(
-                      elevation: 20,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Padding(
-                        padding: EdgeInsets.all(32),
-                        child: Form(
-                          key: _formKey,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              // Logo and Title
-                              Column(
-                                children: [
-                                  Container(
-                                    width: 80,
-                                    height: 80,
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [Colors.white, Colors.pink[200]!], // fix null-safety
-                                      ),
-                                      borderRadius: BorderRadius.circular(20),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.pinkAccent.withOpacity(0.3),
-                                          blurRadius: 15,
-                                          offset: Offset(0, 8),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Image.asset("assets/images/rmbglogo1.png", width: 800, height: 210),
-                                  ),
-                                  SizedBox(height: 24),
-                                  Text(
-                                    ' Admin <Dashboard',
-                                    style: TextStyle(
-                                      fontSize: 28,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF2C3E50),
-                                    ),
-                                  ),
-                                  SizedBox(height: 8),
-                                  Text(
-                                    'Sign in to manage health content',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: Colors.grey[600],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              SizedBox(height: 40),
-
-                              // Email Field
-                              TextFormField(
-                                controller: _emailController,
-                                keyboardType: TextInputType.emailAddress,
-                                decoration: InputDecoration(
-                                  labelText: 'Email Address',
-                                  prefixIcon: Icon(Icons.email_outlined),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(color: Colors.grey[300]!),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(color: Colors.green, width: 2),
-                                  ),
-                                ),
-                                validator: (value) {
-                                  if (value == null || value.isEmpty) {
-                                    return 'Please enter your email';
-                                  }
-                                  if (!value.contains('@')) {
-                                    return 'Please enter a valid email';
-                                  }
-                                  return null;
-                                },
-                              ),
-                              SizedBox(height: 20),
-
-                              // Password Field
-                              TextFormField(
-                                controller: _passwordController,
-                                obscureText: _obscurePassword,
-                                decoration: InputDecoration(
-                                  labelText: 'Password',
-                                  prefixIcon: Icon(Icons.lock_outline),
-                                  suffixIcon: IconButton(
-                                    icon: Icon(
-                                      _obscurePassword ? Icons.visibility : Icons.visibility_off,
-                                    ),
-                                    onPressed: () {
-                                      setState(() {
-                                        _obscurePassword = !_obscurePassword;
-                                      });
-                                    },
-                                  ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(color: Colors.grey[300]!),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide(color: Colors.green, width: 2),
-                                  ),
-                                ),
-                                validator: (value) {
-                                  if (value == null || value.isEmpty) {
-                                    return 'Please enter your password';
-                                  }
-                                  if (value.length < 6) {
-                                    return 'Password must be at least 6 characters';
-                                  }
-                                  return null;
-                                },
-                              ),
-                              SizedBox(height: 16),
-
-                              // Remember Me & Forgot Password
-                              Row(
-                                children: [
-                                  Checkbox(
-                                    value: _rememberMe,
-                                    onChanged: (value) {
-                                      setState(() {
-                                        _rememberMe = value ?? false;
-                                      });
-                                    },
-                                    activeColor: Colors.green,
-                                  ),
-                                  Text('Remember me'),
-                                  Spacer(),
-                                  TextButton(
-                                    onPressed: () async {
-                                      final email = _emailController.text.trim();
-                                      if (email.isEmpty || !email.contains('@')) {
-                                        _showInfoSnackBar(
-                                            'Saisissez un e-mail valide pour réinitialiser.');
-                                        return;
-                                      }
-                                      try {
-                                        await _auth.sendPasswordResetEmail(email: email);
-                                        _showInfoSnackBar(
-                                            'Email de réinitialisation envoyé à $email');
-                                      } on FirebaseAuthException catch (e) {
-                                        _showErrorSnackBar(
-                                            e.message ?? 'Échec d’envoi de l’e-mail.');
-                                      }
-                                    },
-                                    child: Text('Forgot Password?'),
-                                  ),
-                                ],
-                              ),
-                              SizedBox(height: 24),
-
-                              // Login Button
-                              SizedBox(
-                                height: 56,
-                                child: ElevatedButton(
-                                  onPressed: _isLoading ? null : _login,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.pink.shade200,
-                                    foregroundColor: Colors.white,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    elevation: 5,
-                                  ),
-                                  child: _isLoading
-                                      ? Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      SizedBox(
-                                        width: 20,
-                                        height: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                        ),
-                                      ),
-                                      SizedBox(width: 16),
-                                      Text('Signing in...', style: TextStyle(fontSize: 16)),
-                                    ],
-                                  )
-                                      : Text('Sign In', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                                ),
-                              ),
-                              SizedBox(height: 24),
-
-                              // Demo Credentials Button
-                              OutlinedButton.icon(
-                                onPressed: _showDemoCredentials,
-                                icon: Icon(Icons.info_outline),
-                                label: Text('Show Demo Credentials'),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.green,
-                                  side: BorderSide(color: Colors.green),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                              ),
-                            ],
+      backgroundColor: const Color(0xFFF6F7FB),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+                side: const BorderSide(color: Color(0xFFE7E8EE)),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(36),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Align(
+                        child: CircleAvatar(
+                          radius: 34,
+                          backgroundColor: BebezenPalette.primaryLight,
+                          child: Icon(
+                            Icons.admin_panel_settings_rounded,
+                            size: 34,
+                            color: BebezenPalette.primary,
                           ),
                         ),
                       ),
-                    ),
+                      const SizedBox(height: 22),
+                      Text(
+                        'Bebezen Admin',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Administration web et desktop',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Color(0xFF737789)),
+                      ),
+                      const SizedBox(height: 32),
+                      TextFormField(
+                        controller: _emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        autofillHints: const [AutofillHints.email],
+                        decoration: const InputDecoration(
+                          labelText: 'Email administrateur',
+                          prefixIcon: Icon(Icons.email_outlined),
+                        ),
+                        validator: (value) => (value ?? '').trim().contains('@')
+                            ? null
+                            : 'Saisissez une adresse email valide',
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _passwordController,
+                        obscureText: _obscurePassword,
+                        autofillHints: const [AutofillHints.password],
+                        onFieldSubmitted: (_) => _login(),
+                        decoration: InputDecoration(
+                          labelText: 'Mot de passe',
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          suffixIcon: IconButton(
+                            tooltip: _obscurePassword
+                                ? 'Afficher le mot de passe'
+                                : 'Masquer le mot de passe',
+                            onPressed: () => setState(
+                              () => _obscurePassword = !_obscurePassword,
+                            ),
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                            ),
+                          ),
+                        ),
+                        validator: (value) => (value ?? '').length >= 6
+                            ? null
+                            : 'Le mot de passe doit contenir au moins 6 caractères',
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Checkbox(
+                            value: _rememberEmail,
+                            onChanged: (value) =>
+                                setState(() => _rememberEmail = value ?? false),
+                          ),
+                          const Text('Mémoriser l’email'),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: _resetPassword,
+                            child: const Text('Mot de passe oublié ?'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      FilledButton.icon(
+                        onPressed: _loading ? null : _login,
+                        icon: _loading
+                            ? const SizedBox.square(
+                                dimension: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.login_rounded),
+                        label: Text(_loading ? 'Connexion…' : 'Se connecter'),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -535,4 +264,70 @@ class _AdminLoginPageState extends State<AdminLoginPage>
       ),
     );
   }
+}
+
+class _UnauthorizedAccount extends StatelessWidget {
+  const _UnauthorizedAccount({
+    required this.email,
+    required this.uid,
+    this.error,
+  });
+
+  final String email;
+  final String uid;
+  final Object? error;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.lock_person_outlined, size: 56),
+              const SizedBox(height: 16),
+              Text(
+                'Accès administrateur refusé',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 8),
+              Text('$email ne possède pas les droits nécessaires.'),
+              const SizedBox(height: 16),
+              Container(
+                constraints: const BoxConstraints(maxWidth: 620),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: BebezenPalette.primaryLight,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: SelectableText(
+                  error == null
+                      ? 'Vérifiez dans Firestore :\n'
+                            'admins/$uid\n'
+                            'active = true (type boolean)'
+                      : 'Erreur Firestore : $error\n\nUID connecté : $uid',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 24),
+              FilledButton(
+                onPressed: AdminService().signOut,
+                child: const Text('Utiliser un autre compte'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AdminLoading extends StatelessWidget {
+  const _AdminLoading();
+
+  @override
+  Widget build(BuildContext context) =>
+      const Scaffold(body: Center(child: CircularProgressIndicator()));
 }

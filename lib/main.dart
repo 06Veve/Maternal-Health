@@ -1,9 +1,11 @@
 import 'package:bebezen/acceuil.dart';
+import 'package:bebezen/admin/login_admin.dart';
 import 'package:bebezen/core/services/notification_service.dart';
 import 'package:bebezen/core/theme/bebezen_theme.dart';
 import 'package:bebezen/home.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:bebezen/services/gemini_service.dart';
@@ -13,15 +15,23 @@ import 'firebase_options.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: '.env');
-
-  // Initialize AI
-  GeminiService().initialize();
-
-  // Initialize Notifications
-  await NotificationService().initialize();
-
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  if (!_isAdminPlatform) {
+    GeminiService().initialize();
+    await NotificationService().initialize();
+  }
   runApp(const MyApp());
+}
+
+bool get _isAdminPlatform {
+  if (kIsWeb) return true;
+  return switch (defaultTargetPlatform) {
+    TargetPlatform.macOS ||
+    TargetPlatform.windows ||
+    TargetPlatform.linux => true,
+    _ => false,
+  };
 }
 
 class MyApp extends StatelessWidget {
@@ -33,7 +43,7 @@ class MyApp extends StatelessWidget {
       title: 'Bebezen',
       theme: BebezenTheme.lightTheme,
       debugShowCheckedModeBanner: false,
-      home: const Acceuil3(),
+      home: _isAdminPlatform ? const AdminAccessGate() : const Acceuil3(),
     );
   }
 }

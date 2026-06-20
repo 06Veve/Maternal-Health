@@ -684,7 +684,134 @@ Pour une fonctionnalité Firebase, il faut idéalement tester au minimum :
 4. le cas avec un document absent ;
 5. le comportement avec deux comptes différents.
 
-## 21. Scénario conseillé pour la soutenance
+## 21. Administration web et desktop
+
+Le même `main.dart` choisit automatiquement l’interface selon la plateforme :
+
+```text
+Android ou iOS                    → application mère/partenaire
+Chrome, web, macOS, Windows, Linux → administration
+```
+
+La détection repose sur `kIsWeb` et `defaultTargetPlatform`. Les initialisations réservées au mobile, comme les notifications locales, ne sont pas lancées dans l’administration.
+
+### Fonctions administratives disponibles
+
+- connexion Firebase réservée aux administrateurs ;
+- tableau de bord avec comptages Firestore réels ;
+- consultation et recherche des mères, partenaires et administrateurs ;
+- consultation technique des foyers et des liaisons partenaire ;
+- consultation et filtrage des publications communautaires ;
+- suppression d’une publication avec ses likes et réponses ;
+- consultation et suppression des réponses ;
+- motif obligatoire pour chaque suppression ;
+- journal d’audit immuable ;
+- déconnexion ;
+- interface responsive pour navigateur et ordinateur.
+
+L’admin ne peut pas consulter les chats privés, conversations Gemini, symptômes, mouvements du bébé ou journaux de santé. Cette limitation protège la confidentialité des familles.
+
+### Créer le premier administrateur
+
+L’application ne permet volontairement pas de créer un administrateur. Cela empêcherait un utilisateur de s’attribuer lui-même des privilèges.
+
+#### Méthode automatisée recommandée
+
+Le script local `scripts/create-admin.js` crée le compte Firebase Authentication et le document `admins/{uid}` en une seule commande. Il utilise Firebase Admin SDK et ne déploie aucune Cloud Function : il reste donc compatible avec Spark.
+
+Préparation unique :
+
+1. ouvrir **Firebase Console > Paramètres du projet > Comptes de service** ;
+2. générer une nouvelle clé privée ;
+3. conserver le fichier JSON hors du dépôt Git ;
+4. installer les dépendances avec `npm install` si nécessaire.
+
+Sur macOS ou Linux :
+
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS="/chemin/absolu/service-account.json"
+npm run create-admin
+```
+
+Le script demande ensuite l’email, le nom et le mot de passe sans afficher le mot de passe dans le terminal. Si l’adresse existe déjà dans Firebase Auth, il active simplement ses droits administrateur sans remplacer son mot de passe.
+
+La clé de compte de service donne des privilèges élevés. Elle ne doit jamais être ajoutée à Git, envoyée avec l’APK ou intégrée à Flutter. Les noms `service-account*.json` sont ignorés par `.gitignore`.
+
+#### Méthode manuelle
+
+Dans Firebase Console :
+
+1. ouvrir **Authentication > Users** ;
+2. créer l’utilisateur avec son email et son mot de passe ;
+3. copier son UID ;
+4. ouvrir **Firestore Database** ;
+5. créer la collection `admins` ;
+6. créer un document dont l’identifiant est exactement l’UID ;
+7. ajouter les champs suivants :
+
+```text
+admins/{uidFirebaseAuth}
+├── active: true                 booléen
+├── name: "Nom administrateur"  texte facultatif
+└── email: "admin@example.com"  texte facultatif
+```
+
+Seul `active: true` est indispensable pour l’autorisation. Mettre `active` à `false` bloque la prochaine ouverture de l’administration.
+
+Les anciens profils ayant `users/{uid}.role == "admin"` restent acceptés pour compatibilité, mais la collection `admins` est la structure recommandée.
+
+### Lancer l’administration
+
+Dans Chrome :
+
+```bash
+flutter run -d chrome
+```
+
+Sur macOS :
+
+```bash
+flutter run -d macos
+```
+
+Pour produire la version web :
+
+```bash
+flutter build web
+```
+
+### Données administratives ajoutées
+
+```text
+admins/{uid}
+└── active
+
+auditLogs/{logId}
+├── adminId
+├── adminEmail
+├── action: "delete_post" | "delete_reply"
+├── targetType
+├── targetId
+├── reason
+├── metadata
+└── createdAt
+```
+
+Un journal d’audit peut être créé et lu par un administrateur, mais il ne peut plus être modifié ou supprimé depuis l’application.
+
+### Fonctions volontairement exclues
+
+Les fonctions suivantes n’ont pas été ajoutées, car elles nécessiteraient un backend ou une modification fonctionnelle de l’application mobile :
+
+- suppression d’un compte Firebase Auth par un administrateur ;
+- suspension complète d’un compte mobile ;
+- notifications push globales ;
+- annonces consommées par l’accueil mobile ;
+- modification dynamique des conseils actuellement intégrés au mobile.
+
+Cette limite conserve le forfait Firebase Spark et garantit que l’administration ne présente pas de boutons sans effet réel.
+
+## 22. Scénario conseillé pour la soutenance
 
 ### Préparation
 
@@ -708,7 +835,7 @@ Pour une fonctionnalité Firebase, il faut idéalement tester au minimum :
 10. poser une question à Gemini ;
 11. expliquer les règles de sécurité et la séparation des sessions.
 
-## 22. Dépannage
+## 23. Dépannage
 
 ### Écran blanc au démarrage
 
@@ -750,7 +877,7 @@ Firestore affiche généralement un lien permettant de créer l’index. Cela ar
 
 Arrêter complètement `flutter run`, puis relancer. Les assets ne sont pas toujours rechargés par hot reload.
 
-## 23. Améliorations possibles
+## 24. Améliorations possibles
 
 Pour poursuivre le projet :
 
@@ -764,7 +891,7 @@ Pour poursuivre le projet :
 - adopter Riverpod ou Bloc si la gestion d’état devient plus complexe ;
 - améliorer l’accessibilité et les tests sur petites tailles d’écran.
 
-## 24. Résumé à retenir
+## 25. Résumé à retenir
 
 - Firebase Auth gère l’identité et la session.
 - Firestore gère les données métier en temps réel.
