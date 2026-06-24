@@ -1,5 +1,6 @@
 import 'package:bebezen/home.dart';
 import 'package:bebezen/home_nav_pages/emergency_contact_setup.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -426,20 +427,13 @@ class _EmergencyServicesState extends State<EmergencyServices> {
   void _handleEmergencyRequest() async {
     if (selectedReason == null) return;
 
-    if (emergencyContacts.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("No emergency contacts available.")),
-      );
-      return;
-    }
-
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         title: const Text("Confirm SOS"),
         content: Text(
-          "Send emergency alert for: $selectedReason?\nThis will alert your emergency contacts.",
+          "Send emergency alert for: $selectedReason?\nYour partner will be notified immediately.",
         ),
         actions: [
           TextButton(
@@ -447,9 +441,13 @@ class _EmergencyServicesState extends State<EmergencyServices> {
             child: const Text("Cancel"),
           ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+            ),
             onPressed: () async {
               Navigator.pop(context);
-              await _alertContacts();
+              await _sendSosAlert();
             },
             child: const Text("Send SOS"),
           ),
@@ -458,20 +456,59 @@ class _EmergencyServicesState extends State<EmergencyServices> {
     );
   }
 
-  // Call all emergency contacts
-  Future<void> _alertContacts() async {
-    for (var contact in emergencyContacts) {
-      final phone = contact["phone"] ?? "";
+  // Notify partner via Firestore, then call emergency contacts
+  Future<void> _sendSosAlert() async {
+    final householdId = await AccountService().currentHouseholdId();
+    if (householdId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Account not configured. Please try again.")),
+        );
+      }
+      return;
+    }
+
+    // 1. Write to Firestore — partner sees it in real time
+    try {
+      await FirebaseFirestore.instance
+          .collection('households')
+          .doc(householdId)
+          .collection('sosAlerts')
+          .add({
+            'reason': selectedReason,
+            'status': 'active',
+            'triggeredAt': FieldValue.serverTimestamp(),
+            'triggeredBy': FirebaseAuth.instance.currentUser?.uid,
+          });
+    } on FirebaseException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Could not notify partner: ${e.message}")),
+        );
+      }
+      return;
+    }
+
+    // 2. Call emergency contacts (if any)
+    for (final contact in emergencyContacts) {
+      final phone = contact["phone"] as String? ?? "";
       if (phone.isNotEmpty) {
-        await _callNumber(phone); // You can also send SMS here
+        await _callNumber(phone);
       }
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("SOS alert sent for: $selectedReason"),
-        backgroundColor: Colors.red.shade600,
-      ),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            emergencyContacts.isEmpty
+                ? "Partner notified: $selectedReason"
+                : "SOS alert sent for: $selectedReason",
+          ),
+          backgroundColor: Colors.red.shade600,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
   }
 }

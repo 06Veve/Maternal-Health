@@ -29,6 +29,10 @@ service cloud.firestore {
       return householdMember(householdId) &&
         get(/databases/$(database)/documents/households/$(householdId)).data.motherId == request.auth.uid;
     }
+    function partnerOf(householdId) {
+      return householdMember(householdId) &&
+        get(/databases/$(database)/documents/households/$(householdId)).data.partnerId == request.auth.uid;
+    }
     function sameHousehold(profile) {
       return signedIn() && profile.householdId != null &&
         userData().householdId == profile.householdId;
@@ -84,7 +88,30 @@ service cloud.firestore {
       allow delete: if motherOf(householdId);
 
       match /tasks/{taskId} {
-        allow read, create, update, delete: if householdMember(householdId);
+        allow read: if householdMember(householdId);
+        allow create: if motherOf(householdId) &&
+          request.resource.data.keys().hasOnly(['title', 'completed', 'createdBy', 'createdAt']) &&
+          request.resource.data.title is string &&
+          request.resource.data.title.size() > 0 &&
+          request.resource.data.title.size() <= 200 &&
+          request.resource.data.completed == false &&
+          request.resource.data.createdBy == request.auth.uid &&
+          request.resource.data.createdAt == request.time;
+        allow update: if partnerOf(householdId) &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['completed', 'completedBy', 'completedAt']) &&
+          (
+            (
+              request.resource.data.completed == true &&
+              request.resource.data.completedBy == request.auth.uid &&
+              request.resource.data.completedAt == request.time
+            ) || (
+              request.resource.data.completed == false &&
+              request.resource.data.completedBy == null &&
+              request.resource.data.completedAt == null
+            )
+          );
+        allow delete: if motherOf(householdId);
       }
       match /messages/{messageId} {
         allow read: if householdMember(householdId);
@@ -107,6 +134,16 @@ service cloud.firestore {
       match /emergencyContacts/{contactId} {
         allow read: if householdMember(householdId);
         allow write: if motherOf(householdId);
+      }
+      match /sosAlerts/{alertId} {
+        allow read: if householdMember(householdId);
+        allow create: if motherOf(householdId) &&
+          request.resource.data.triggeredBy == request.auth.uid &&
+          request.resource.data.status == 'active';
+        allow update: if householdMember(householdId) &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'resolvedAt']) &&
+          request.resource.data.status == 'resolved';
       }
     }
 

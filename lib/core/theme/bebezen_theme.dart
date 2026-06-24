@@ -20,6 +20,16 @@ class BebezenPalette {
   static const Color error = Color(0xFFF44336);
   static const Color warning = Color(0xFFFF9800);
 
+  // Partner mode — soft blue palette
+  static const Color partnerPrimary = Color(0xFF1976D2);
+  static const Color partnerPrimaryLight = Color(0xFFBBDEFB);
+  static const Color partnerBackground = Color(0xFFF0F7FF);
+  static const LinearGradient partnerGradient = LinearGradient(
+    colors: [Color(0xFF1565C0), Color(0xFF42A5F5)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
   // Gradients
   static const LinearGradient primaryGradient = LinearGradient(
     colors: [Color(0xFFE91E63), Color(0xFFFF4081)],

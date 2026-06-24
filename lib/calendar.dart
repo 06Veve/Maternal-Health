@@ -16,13 +16,14 @@ int notifIdFromDate(DateTime dt) => dt.millisecondsSinceEpoch ~/ 1000;
 
 /// Event model to store more detailed information
 class PregnancyEvent {
-  final String? id; // Firestore doc id
+  final String? id;
   final String title;
   final String type;
   final DateTime dateTime;
   final String? notes;
   final bool isCompleted;
-  final int? notifyId; // local notification id (for cancel/update)
+  final int? notifyId;
+  final bool? partnerAttending;
 
   PregnancyEvent({
     this.id,
@@ -32,6 +33,7 @@ class PregnancyEvent {
     this.notes,
     this.isCompleted = false,
     this.notifyId,
+    this.partnerAttending,
   });
 
   PregnancyEvent copyWith({
@@ -42,6 +44,7 @@ class PregnancyEvent {
     String? notes,
     bool? isCompleted,
     int? notifyId,
+    bool? partnerAttending,
   }) {
     return PregnancyEvent(
       id: id ?? this.id,
@@ -51,6 +54,7 @@ class PregnancyEvent {
       notes: notes ?? this.notes,
       isCompleted: isCompleted ?? this.isCompleted,
       notifyId: notifyId ?? this.notifyId,
+      partnerAttending: partnerAttending ?? this.partnerAttending,
     );
   }
 
@@ -78,6 +82,7 @@ class PregnancyEvent {
       notes: data['notes'] as String?,
       isCompleted: (data['isCompleted'] ?? false) as bool,
       notifyId: (data['notifyId'] as int?) ?? notifIdFromDate(dt),
+      partnerAttending: data['partnerAttending'] as bool?,
     );
   }
 }
@@ -666,6 +671,53 @@ class _PregnancyCalendarPageState extends State<PregnancyCalendarPage> {
                                 fontSize: 12,
                                 color: Colors.grey[600],
                                 fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
+                          if (event.partnerAttending != null) ...[
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: event.partnerAttending!
+                                    ? Colors.green.shade50
+                                    : Colors.orange.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: event.partnerAttending!
+                                      ? Colors.green.shade300
+                                      : Colors.orange.shade300,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    event.partnerAttending!
+                                        ? Icons.person
+                                        : Icons.person_off,
+                                    size: 13,
+                                    color: event.partnerAttending!
+                                        ? Colors.green.shade700
+                                        : Colors.orange.shade700,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    event.partnerAttending!
+                                        ? 'Partner will attend'
+                                        : 'Partner won\'t attend',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: event.partnerAttending!
+                                          ? Colors.green.shade700
+                                          : Colors.orange.shade700,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
